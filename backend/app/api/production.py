@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from sqlmodel import Session, select
 from typing import List, Optional
+from pydantic import BaseModel
 from app.db import get_session
 from app.models.project import Project
 from app.models.script import Script, Scene
@@ -247,3 +248,39 @@ async def generate_cinematography(project_id: str, scene_id: str, db: Session = 
     db.commit()
 
     return {"message": "Cinematography generated", "shots": new_shots}
+
+class ShotBlueprintUpdate(BaseModel):
+    shot_size: Optional[str] = None
+    camera_angle: Optional[str] = None
+    lens: Optional[str] = None
+    composition: Optional[str] = None
+    lighting: Optional[str] = None
+    camera_movement: Optional[str] = None
+    subject: Optional[str] = None
+    character_actions: Optional[str] = None
+    emotion: Optional[str] = None
+    visual_prompt: Optional[str] = None
+    purpose: Optional[str] = None
+    story_beat: Optional[str] = None
+
+@router.patch("/projects/{project_id}/production/shots/{shot_id}")
+async def update_shot_blueprint(project_id: str, shot_id: str, update_data: ShotBlueprintUpdate, db: Session = Depends(get_session)):
+    shot = db.get(ShotBlueprint, shot_id)
+    if not shot:
+        raise HTTPException(status_code=404, detail="Shot not found")
+        
+    # Verify the shot belongs to a production plan for this project
+    plan = db.get(ProductionPlan, shot.production_plan_id)
+    if not plan or plan.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Shot not found for this project")
+
+    update_dict = update_data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(shot, key, value)
+        
+    shot.status = ShotStatus.EDITED
+    db.add(shot)
+    db.commit()
+    db.refresh(shot)
+    
+    return shot

@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app.main import app
 from app.db import get_session
 
-sqlite_url = "sqlite://"
-engine = create_engine(sqlite_url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+sqlite_url = "sqlite:///./test.db"
+engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
 
 def get_session_override():
     with Session(engine) as session:

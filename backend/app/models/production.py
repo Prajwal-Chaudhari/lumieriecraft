@@ -102,3 +102,26 @@ class ShotBlueprintBase(SQLModel):
 
 class ShotBlueprint(ShotBlueprintBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+
+class StoryboardFrameBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    production_plan_id: str = Field(foreign_key="productionplan.id")
+    script_id: str = Field(foreign_key="script.id")
+    script_version: int
+    scene_id: str
+    shot_id: str = Field(foreign_key="shotblueprint.id")
+
+    generation_id: str
+    provider: str
+    model: str
+    image_url: str
+
+    prompt: Optional[str] = None
+    generation_metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    
+    status: str
+    error_message: Optional[str] = None
+
+class StoryboardFrame(StoryboardFrameBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
