@@ -27,7 +27,7 @@ class Scene(BaseModel):
     characters: List[CharacterRef] = []
     actions: List[SceneAction] = []
     dialogue: List[DialogueLine] = []
-    metadata: dict = {}
+    metadata: Optional[dict] = {}
 
 class ScriptBase(SQLModel):
     title: str

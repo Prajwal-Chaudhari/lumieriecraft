@@ -29,6 +29,7 @@ class GeminiLLMProvider(LLMProvider):
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     response_mime_type="application/json",
+                    response_schema=schema,
                 ),
             )
             

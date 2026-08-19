@@ -1,36 +1,13 @@
 import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, Session, create_engine
 import os
 import sys
 
 # Ensure we can import app modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.main import app
-from app.db import get_session
-from app.models.project import Project
-from app.models.script import Script
-from sqlalchemy.pool import StaticPool
-# Use an in-memory database for testing
-sqlite_url = "sqlite://"
-engine = create_engine(sqlite_url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
+os.environ["SCRIPT_WRITER_PROVIDER"] = "mock"
 
-def get_session_override():
-    with Session(engine) as session:
-        yield session
-
-app.dependency_overrides[get_session] = get_session_override
-
-client = TestClient(app)
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    SQLModel.metadata.create_all(engine)
-    yield
-    SQLModel.metadata.drop_all(engine)
-
-def test_create_project():
+def test_create_project(client):
     response = client.post("/api/projects", json={
         "name": "Test Project",
         "story_idea": "A test idea",
@@ -44,7 +21,7 @@ def test_create_project():
     assert data["name"] == "Test Project"
     assert "id" in data
 
-def test_get_projects():
+def test_get_projects(client):
     client.post("/api/projects", json={
         "name": "Test Project",
         "story_idea": "A test idea",
@@ -59,7 +36,7 @@ def test_get_projects():
     assert len(data) >= 1
     assert data[0]["name"] == "Test Project"
 
-def test_get_project():
+def test_get_project(client):
     create_response = client.post("/api/projects", json={
         "name": "Test Project",
         "story_idea": "A test idea",
@@ -74,15 +51,16 @@ def test_get_project():
     assert response.status_code == 200
     assert response.json()["id"] == project_id
 
-def test_get_nonexistent_project():
+def test_get_nonexistent_project(client):
     response = client.get("/api/projects/nonexistent-id")
     assert response.status_code == 404
 
-def test_regeneration_placeholder():
+def test_analyze_and_propose(client):
     # Setup project
     create_response = client.post("/api/projects", json={
         "name": "Test Project",
         "story_idea": "A test idea",
+        "source_material": "Rough draft text",
         "genre": "Sci-Fi",
         "duration": "Feature",
         "tone": "Dark",
@@ -90,8 +68,8 @@ def test_regeneration_placeholder():
     })
     project_id = create_response.json()["id"]
     
-    # Generate script
-    script_response = client.post(f"/api/projects/{project_id}/script/generate")
+    # Analyze script
+    script_response = client.post(f"/api/projects/{project_id}/script/analyze")
     assert script_response.status_code == 200
     script_data = script_response.json()
     
@@ -99,20 +77,31 @@ def test_regeneration_placeholder():
     scenes = script_data.get("scenes", [])
     assert len(scenes) > 0
     scene_id = scenes[0]["id"]
-    original_desc = scenes[0]["description"]
     
-    # Regenerate scene
+    # Propose scene
     regen_response = client.post(
-        f"/api/projects/{project_id}/script/scenes/{scene_id}/regenerate",
+        f"/api/projects/{project_id}/script/scenes/{scene_id}/propose",
         json={"instructions": "Make it rain"}
     )
     assert regen_response.status_code == 200, regen_response.text
     regen_data = regen_response.json()
     
-    regen_scenes = regen_data.get("scenes", [])
-    regen_scene = next((s for s in regen_scenes if s["id"] == scene_id), None)
-    assert regen_scene is not None
+    proposed_scene = regen_data.get("proposed_scene")
+    assert proposed_scene is not None
     # We are using MockLLMProvider which returns a hardcoded Space Station scene
     # But ScriptWriterService must preserve the original scene ID and scene_number.
-    assert regen_scene["heading"] == "INT. SPACE STATION - NIGHT"
-    assert regen_scene["scene_number"] == scenes[0]["scene_number"]
+    assert proposed_scene["heading"] == "INT. SPACE STATION - NIGHT"
+    assert proposed_scene["scene_number"] == scenes[0]["scene_number"]
+    
+    # Apply scene
+    apply_response = client.post(
+        f"/api/projects/{project_id}/script/scenes/{scene_id}/apply",
+        json={"scene": proposed_scene}
+    )
+    assert apply_response.status_code == 200
+    apply_data = apply_response.json()
+    
+    updated_scenes = apply_data.get("scenes", [])
+    updated_scene = next((s for s in updated_scenes if s["id"] == scene_id), None)
+    assert updated_scene is not None
+    assert updated_scene["heading"] == "INT. SPACE STATION - NIGHT"

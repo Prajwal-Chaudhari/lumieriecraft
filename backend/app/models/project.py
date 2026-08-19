@@ -5,6 +5,7 @@ import uuid
 class ProjectBase(SQLModel):
     name: str
     story_idea: str
+    source_material: Optional[str] = None
     genre: str
     duration: str
     tone: str
@@ -19,6 +20,7 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(SQLModel):
     name: Optional[str] = None
     story_idea: Optional[str] = None
+    source_material: Optional[str] = None
     genre: Optional[str] = None
     duration: Optional[str] = None
     tone: Optional[str] = None
