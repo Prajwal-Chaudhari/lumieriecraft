@@ -45,7 +45,7 @@ class PixazoProvider(ImageGenerationProvider):
 
         async with httpx.AsyncClient() as client:
             try:
-                submit_resp = await client.post(self.submit_url, headers=headers, json=payload, timeout=30.0)
+                submit_resp = await client.post(self.submit_url, headers=headers, json=payload, timeout=120.0)
                 submit_resp.raise_for_status()
             except httpx.HTTPStatusError as e:
                 raise RuntimeError(f"Pixazo submission failed with status {e.response.status_code}") from e
@@ -76,7 +76,7 @@ class PixazoProvider(ImageGenerationProvider):
             for attempt in range(max_attempts):
                 await asyncio.sleep(poll_interval)
                 try:
-                    status_resp = await client.get(status_url, headers=headers, timeout=30.0)
+                    status_resp = await client.get(status_url, headers=headers, timeout=120.0)
                     status_resp.raise_for_status()
                 except httpx.HTTPError as e:
                     raise RuntimeError(f"Pixazo status polling failed: {str(e)}") from e

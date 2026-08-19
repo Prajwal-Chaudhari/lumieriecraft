@@ -30,12 +30,10 @@ export function Sidebar() {
         
         {projectId && (
           <div className="mt-2 space-y-1 ml-4 border-l-2 border-border pl-2 pb-4">
-            <LinkItem href={`/projects/${projectId}`} icon={Film}>Story</LinkItem>
+            <LinkItem href={`/projects/${projectId}`} icon={LayoutDashboard}>Dashboard</LinkItem>
             <LinkItem href={`/projects/${projectId}/script`} icon={FileText}>Script Studio</LinkItem>
-            <LinkItem href={`/projects/${projectId}/scenes`} icon={Clapperboard}>Scenes</LinkItem>
-            <LinkItem href={`/projects/${projectId}/characters`} icon={Users}>Characters & World</LinkItem>
+            <LinkItem href={`/projects/${projectId}/production`} icon={Video}>Production Plan</LinkItem>
             <LinkItem href={`/projects/${projectId}/storyboard`} icon={ImageIcon}>Storyboard</LinkItem>
-            <LinkItem href={`/projects/${projectId}/production`} icon={Video}>Production</LinkItem>
           </div>
         )}
 

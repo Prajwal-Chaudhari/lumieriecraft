@@ -38,6 +38,22 @@ export default function ProjectDashboardPage() {
         <p className="text-gray-400 mt-2">Project Dashboard</p>
       </div>
 
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-8 text-sm">
+        <h3 className="text-gray-500 font-semibold uppercase tracking-wider mb-3">Project Details</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div><span className="text-gray-500">Genre:</span> <span className="text-gray-300">{project.genre}</span></div>
+          <div><span className="text-gray-500">Tone:</span> <span className="text-gray-300">{project.tone}</span></div>
+          <div><span className="text-gray-500">Duration:</span> <span className="text-gray-300">{project.duration}</span></div>
+          <div><span className="text-gray-500">Style:</span> <span className="text-gray-300">{project.visual_style}</span></div>
+        </div>
+        {project.source_material && (
+          <div className="mt-4">
+            <span className="text-gray-500">Source Material Attached:</span>
+            <div className="text-gray-400 italic truncate mt-1">{project.source_material}</div>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Script Studio Card */}
         <Link href={`/projects/${project.id}/script`} className="block group">
@@ -56,24 +72,39 @@ export default function ProjectDashboardPage() {
           </div>
         </Link>
 
-        {/* Future modules placeholders */}
-        <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-6 opacity-60">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-400">Storyboard Agent</h2>
+        {/* Production Plan Card */}
+        <Link href={`/projects/${project.id}/production`} className="block group">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-indigo-500 hover:shadow-lg transition-all h-full flex flex-col">
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold text-gray-100 group-hover:text-indigo-400 transition-colors">Production Plan</h2>
+            </div>
+            <p className="text-gray-400 text-sm mb-6 flex-grow">
+              Review Scene Breakdowns, Character & World Bibles, and Cinematography Shot Blueprints generated from your approved script.
+            </p>
+            <div className="mt-auto flex justify-end">
+              <span className="text-indigo-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                View Plan &rarr;
+              </span>
+            </div>
           </div>
-          <p className="text-gray-500 text-sm mb-6">
-            Generate visual storyboards for your script scenes. (Coming soon)
-          </p>
-        </div>
+        </Link>
         
-        <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-6 opacity-60">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold text-gray-400">Cinematography Agent</h2>
+        {/* Storyboard Card */}
+        <Link href={`/projects/${project.id}/storyboard`} className="block group">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-indigo-500 hover:shadow-lg transition-all h-full flex flex-col">
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold text-gray-100 group-hover:text-indigo-400 transition-colors">Storyboard</h2>
+            </div>
+            <p className="text-gray-400 text-sm mb-6 flex-grow">
+              Visualize your script. Generate, review, and approve storyboard frames for each shot blueprint in your production plan.
+            </p>
+            <div className="mt-auto flex justify-end">
+              <span className="text-indigo-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                Open Storyboard &rarr;
+              </span>
+            </div>
           </div>
-          <p className="text-gray-500 text-sm mb-6">
-            Define exact camera angles and shots. (Coming soon)
-          </p>
-        </div>
+        </Link>
       </div>
     </div>
   );

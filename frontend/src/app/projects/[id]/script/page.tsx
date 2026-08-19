@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Project, Script, Scene, fetchProject, fetchScript, generateScript, regenerateScene } from "@/lib/api";
+import { 
+  Project, Script, Scene, 
+  fetchProject, fetchScript, analyzeScript, proposeSceneEnhancement, applySceneUpdate 
+} from "@/lib/api";
 
 export default function ScriptStudioPage() {
   const params = useParams();
@@ -18,6 +21,7 @@ export default function ScriptStudioPage() {
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
+  const [proposedScene, setProposedScene] = useState<Scene | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -33,32 +37,51 @@ export default function ScriptStudioPage() {
       .finally(() => setLoadingInitial(false));
   }, [id]);
 
-  const handleGenerateScript = async () => {
+  const handleAnalyzeScript = async () => {
     setGenerating(true);
     setError(null);
     try {
-      const newScript = await generateScript(id);
+      const newScript = await analyzeScript(id);
       setScript(newScript);
     } catch (err: any) {
-      setError(err.message || "Failed to generate script");
+      setError(err.message || "Failed to analyze script");
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleRegenerateScene = async () => {
+  const handleProposeEnhancement = async () => {
     if (!selectedSceneId) return;
     setGenerating(true);
     setError(null);
     try {
-      const updatedScript = await regenerateScene(id, selectedSceneId, { instructions });
-      setScript(updatedScript);
-      setInstructions(""); // Clear instructions on success
+      const result = await proposeSceneEnhancement(id, selectedSceneId, { instructions });
+      setProposedScene(result.proposed_scene);
     } catch (err: any) {
-      setError(err.message || "Failed to regenerate scene");
+      setError(err.message || "Failed to propose scene enhancement");
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleApplyEnhancement = async () => {
+    if (!selectedSceneId || !proposedScene) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const updatedScript = await applySceneUpdate(id, selectedSceneId, proposedScene);
+      setScript(updatedScript);
+      setProposedScene(null);
+      setInstructions(""); // Clear instructions on success
+    } catch (err: any) {
+      setError(err.message || "Failed to apply enhancement");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRejectEnhancement = () => {
+    setProposedScene(null);
   };
 
   if (loadingInitial) {
@@ -87,7 +110,7 @@ export default function ScriptStudioPage() {
       {/* Main 3-Pane Layout */}
       <div className="flex flex-1 overflow-hidden">
         
-        {/* LEFT PANE: Project Context (approx 20%) */}
+        {/* LEFT PANE: Project Context */}
         <aside className="w-1/5 min-w-[250px] bg-gray-900/50 border-r border-gray-800 overflow-y-auto p-6 hidden md:block">
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">Project Context</h2>
           
@@ -108,14 +131,10 @@ export default function ScriptStudioPage() {
               <h3 className="text-xs text-gray-500 mb-1">VISUAL STYLE</h3>
               <p className="text-sm font-medium text-gray-300">{project.visual_style}</p>
             </div>
-            <div>
-              <h3 className="text-xs text-gray-500 mb-1">DURATION</h3>
-              <p className="text-sm font-medium text-gray-300">{project.duration}</p>
-            </div>
           </div>
         </aside>
 
-        {/* CENTER PANE: Script Canvas (approx 55%) */}
+        {/* CENTER PANE: Script Canvas */}
         <main className="flex-1 bg-[#1a1c23] overflow-y-auto relative shadow-inner">
           <div className="max-w-3xl mx-auto py-12 px-8 pb-32">
             {!script ? (
@@ -126,9 +145,18 @@ export default function ScriptStudioPage() {
                   </svg>
                 </div>
                 <h2 className="text-xl font-medium text-gray-300 mb-2">Blank Canvas</h2>
-                <p className="text-gray-500 max-w-sm">
-                  Use the AI Copilot on the right to generate the first draft of your screenplay.
+                <p className="text-gray-500 max-w-sm mb-6">
+                  {project.source_material 
+                    ? "Analyze the rough script to begin structuring your screenplay."
+                    : "Use the AI Copilot on the right to generate the first draft of your screenplay."}
                 </p>
+                <button
+                  onClick={handleAnalyzeScript}
+                  disabled={generating}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2 rounded-md font-medium transition-colors"
+                >
+                  {generating ? "Analyzing..." : "Analyze & Structure Script"}
+                </button>
               </div>
             ) : (
               <div className="space-y-12">
@@ -143,7 +171,11 @@ export default function ScriptStudioPage() {
                   return (
                     <div 
                       key={scene.id} 
-                      onClick={() => setSelectedSceneId(scene.id)}
+                      onClick={() => {
+                        if (!proposedScene || selectedSceneId === scene.id) {
+                          setSelectedSceneId(scene.id);
+                        }
+                      }}
                       className={`
                         p-6 rounded-lg border transition-all cursor-pointer relative group
                         ${isSelected 
@@ -202,7 +234,7 @@ export default function ScriptStudioPage() {
           </div>
         </main>
 
-        {/* RIGHT PANE: AI Copilot (approx 25%) */}
+        {/* RIGHT PANE: AI Copilot */}
         <aside className="w-1/4 min-w-[320px] bg-gray-900 border-l border-gray-800 flex flex-col">
           <div className="p-4 border-b border-gray-800 flex items-center">
             <svg className="w-5 h-5 text-indigo-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -221,24 +253,16 @@ export default function ScriptStudioPage() {
             {!script ? (
               // Empty State Action
               <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-5">
-                <h3 className="text-white font-medium mb-2">First Draft</h3>
+                <h3 className="text-white font-medium mb-2">Analyze Script</h3>
                 <p className="text-gray-400 text-sm mb-5">
-                  Generate the initial screenplay based on your project idea, genre, and style parameters.
+                  Structure your rough script into a professional screenplay format.
                 </p>
                 <button
-                  onClick={handleGenerateScript}
+                  onClick={handleAnalyzeScript}
                   disabled={generating}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2 rounded font-medium transition-colors flex justify-center items-center"
                 >
-                  {generating ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Writing Script...
-                    </>
-                  ) : "Generate Script"}
+                  {generating ? "Analyzing..." : "Analyze & Structure"}
                 </button>
               </div>
             ) : !selectedScene ? (
@@ -250,11 +274,51 @@ export default function ScriptStudioPage() {
                   </svg>
                 </div>
                 <p className="text-gray-400 text-sm">
-                  Select a scene in the canvas to regenerate or modify it.
+                  Select a scene in the canvas to enhance it professionally.
                 </p>
               </div>
+            ) : proposedScene ? (
+              // Proposed enhancement view
+              <div className="space-y-6 animate-fade-in">
+                <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+                  <h3 className="text-green-400 font-medium mb-2 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Enhancement Proposed
+                  </h3>
+                  <p className="text-xs text-gray-300 mb-4">
+                    Review the proposed changes. The original scene remains intact until you click Apply.
+                  </p>
+                  
+                  {/* Miniature diff view */}
+                  <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="text-xs font-bold text-gray-500 uppercase">Proposed Description:</div>
+                    <div className="text-sm text-gray-200 italic border-l-2 border-indigo-500 pl-2">
+                      {proposedScene.description}
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={handleApplyEnhancement}
+                      disabled={generating}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded text-sm font-medium transition-colors"
+                    >
+                      {generating ? "Applying..." : "Apply"}
+                    </button>
+                    <button
+                      onClick={handleRejectEnhancement}
+                      disabled={generating}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded text-sm font-medium transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              // Scene selected
+              // Scene selected, ready for enhancement
               <div className="space-y-6">
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -268,21 +332,34 @@ export default function ScriptStudioPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Optional Instructions
+                    How should we enhance this?
                   </label>
+                  <div className="space-y-2 mb-3">
+                    {/* Quick suggestion buttons */}
+                    {["Make it more cinematic", "Improve pacing", "Enhance dialogue"].map(suggestion => (
+                      <button 
+                        key={suggestion}
+                        onClick={() => setInstructions(suggestion)}
+                        className="block w-full text-left text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded transition-colors"
+                      >
+                        ✨ {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                  
                   <textarea
                     value={instructions}
                     onChange={(e) => setInstructions(e.target.value)}
                     disabled={generating}
-                    rows={4}
+                    rows={3}
                     className="w-full bg-gray-950 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-gray-600 transition-colors"
-                    placeholder="e.g., Make the dialogue more aggressive, add rain outside the window..."
+                    placeholder="Or type custom instructions..."
                   />
                 </div>
 
                 <button
-                  onClick={handleRegenerateScene}
-                  disabled={generating}
+                  onClick={handleProposeEnhancement}
+                  disabled={generating || !instructions.trim()}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2 rounded font-medium transition-colors flex justify-center items-center shadow-lg shadow-indigo-900/20"
                 >
                   {generating ? (
@@ -291,14 +368,14 @@ export default function ScriptStudioPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Regenerating...
+                      Thinking...
                     </>
                   ) : (
                     <>
                       <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      Regenerate Scene
+                      Propose Enhancement
                     </>
                   )}
                 </button>
