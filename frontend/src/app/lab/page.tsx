@@ -76,7 +76,7 @@ export default function ImageGenerationLab() {
             <CardContent className="p-6 space-y-6">
               <div className="space-y-2">
                 <Label>Provider</Label>
-                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <Select value={selectedProvider} onValueChange={(val) => setSelectedProvider(val as string)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>

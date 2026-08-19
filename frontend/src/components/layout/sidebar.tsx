@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Film, LayoutDashboard, FileText, Clapperboard, Users, Image as ImageIcon, Video, Bot, Terminal, Camera, Activity, Wand2 } from "lucide-react";
 import { usePathname } from "next/navigation";

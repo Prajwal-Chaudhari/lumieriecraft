@@ -6,3 +6,5 @@ httpx
 python-dotenv
 pytest
 sqlmodel
+google-genai
+openai

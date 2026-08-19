@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
+from typing import Optional
+from pydantic import BaseModel
 from sqlmodel import Session, select
 from app.db import get_session
 from app.models.project import Project, ProjectCreate
 from app.models.script import Script, ScriptCreate
 from app.services.script_writer import ScriptWriterService
+
+class RegenerateSceneRequest(BaseModel):
+    instructions: Optional[str] = None
 
 router = APIRouter(tags=["projects"])
 
@@ -58,16 +63,40 @@ async def generate_script(project_id: str, session: Session = Depends(get_sessio
     return script
 
 @router.post("/projects/{project_id}/script/scenes/{scene_id}/regenerate", response_model=Script)
-async def regenerate_scene(project_id: str, scene_id: str, session: Session = Depends(get_session)):
-    # For now, we mock the regeneration of a single scene
+async def regenerate_scene(
+    project_id: str, 
+    scene_id: str, 
+    request: RegenerateSceneRequest,
+    session: Session = Depends(get_session)
+):
+    # If no instructions are provided, the user can send an empty object
+    instructions = request.instructions if request else None
+    
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     script = session.exec(select(Script).where(Script.project_id == project_id)).first()
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
     
-    # Just a placeholder for actual LLM call to rewrite one scene
-    for s in script.scenes:
+    # Find the target scene
+    target_scene = None
+    target_index = -1
+    for i, s in enumerate(script.scenes):
         if s.get("id") == scene_id:
-            s["description"] += " (Regenerated)"
+            target_scene = s
+            target_index = i
+            break
+            
+    if not target_scene:
+        raise HTTPException(status_code=404, detail="Scene not found in script")
+
+    script_writer = ScriptWriterService()
+    new_scene = await script_writer.regenerate_scene(project, target_scene, instructions)
+    
+    # Replace the old scene with the new scene
+    script.scenes[target_index] = new_scene
     
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(script, "scenes")

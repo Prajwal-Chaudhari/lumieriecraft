@@ -102,11 +102,17 @@ def test_regeneration_placeholder():
     original_desc = scenes[0]["description"]
     
     # Regenerate scene
-    regen_response = client.post(f"/api/projects/{project_id}/script/scenes/{scene_id}/regenerate")
-    assert regen_response.status_code == 200
+    regen_response = client.post(
+        f"/api/projects/{project_id}/script/scenes/{scene_id}/regenerate",
+        json={"instructions": "Make it rain"}
+    )
+    assert regen_response.status_code == 200, regen_response.text
     regen_data = regen_response.json()
     
     regen_scenes = regen_data.get("scenes", [])
     regen_scene = next((s for s in regen_scenes if s["id"] == scene_id), None)
     assert regen_scene is not None
-    assert regen_scene["description"] == original_desc + " (Regenerated)"
+    # We are using MockLLMProvider which returns a hardcoded Space Station scene
+    # But ScriptWriterService must preserve the original scene ID and scene_number.
+    assert regen_scene["heading"] == "INT. SPACE STATION - NIGHT"
+    assert regen_scene["scene_number"] == scenes[0]["scene_number"]
