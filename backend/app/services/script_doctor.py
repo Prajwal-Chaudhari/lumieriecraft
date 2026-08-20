@@ -63,25 +63,34 @@ SCRIPT_SCHEMA = {
     "required": ["title", "scenes"]
 }
 
-class ScriptWriterService:
+class ScriptDoctorService:
     def __init__(self):
         self.llm_provider = get_llm_provider()
 
-    async def analyze_script(self, project: Project) -> dict:
+    async def standardize_screenplay(self, project: Project) -> dict:
         prompt = f"""
-You are a professional filmmaking assistant. The director has provided a rough script or story concept.
-Your task is to analyze it, extract characters and locations, improve its structure into professional screenplay format, and return it as a structured JSON script.
-DO NOT completely change the story or intent. ENHANCE it cinematically.
+You are an expert Script Doctor. The director has provided raw source material (rough script or story treatment).
+Your sole task is to STANDARDIZE this material into a professional screenplay format.
+
+RULES:
+- Normalize sluglines, INT/EXT formatting, location, and time of day.
+- Standardize action blocks and dialogue formatting.
+- Correct grammar, spelling, and improve screenplay readability.
+- Maintain character name consistency.
+- DO NOT invent new plot events or characters.
+- DO NOT change the story structure unnecessarily or alter dialogue intent.
+- DO NOT add cinematic directions (no camera angles, lenses, movement, lighting, or color grading).
+- Preserve the exact sequence of events the director provided.
 
 Project Name: {project.name}
 Genre: {project.genre}
 Tone: {project.tone}
-Visual Style: {project.visual_style}
 
-Director's Rough Script / Source Material:
+Director's Raw Material:
 {project.source_material or project.story_idea}
 
 Make sure every scene gets a unique string 'id' like 'scene_xyz'.
+Return a structured JSON script.
 """
         result = await self.llm_provider.generate_json(prompt, SCRIPT_SCHEMA)
         
@@ -103,31 +112,32 @@ Make sure every scene gets a unique string 'id' like 'scene_xyz'.
         result["scenes"] = validated_scenes
         return result
 
-    async def propose_scene_enhancement(self, project: Project, scene_data: dict, instruction: str) -> dict:
+    async def propose_scene_standardization(self, project: Project, base_version: int, target_scene: dict, instructions: str) -> dict:
         prompt = f"""
-You are a professional filmmaking assistant. The director wants to enhance a specific scene.
-Preserve the core story, emotional intent, and character identities. ENHANCE the scene cinematically based on the instruction.
+You are an expert Script Doctor. The director wants to standardize or fix a specific scene from a professional screenplay (Base Version: {base_version}).
+Your task is to apply the requested formatting or standardization fixes.
 
-Project Genre: {project.genre}
-Tone: {project.tone}
+RULES:
+- Apply the requested fix (e.g., standardizing dialogue, formatting action blocks, fixing grammar).
+- Preserve all story events, emotional intent, and character identities.
+- DO NOT invent new plot events, new characters, or delete essential events.
+- DO NOT add cinematic directions (no camera angles, lenses, lighting, etc).
+- Return ONLY the proposed standardized scene in JSON format.
 
 Current Scene:
-{json.dumps(scene_data, indent=2)}
+{json.dumps(target_scene, indent=2)}
 
-Director's Instruction:
-{instruction}
-
-Return ONLY the proposed enhanced scene matching the JSON schema.
+Director's Fix Instruction:
+{instructions}
 """
         result = await self.llm_provider.generate_json(prompt, SINGLE_SCENE_SCHEMA)
         
         # Identity Preservation
-        result["id"] = scene_data["id"]
-        result["scene_number"] = scene_data.get("scene_number", 0)
+        result["id"] = target_scene["id"]
+        result["scene_number"] = target_scene.get("scene_number", 0)
         
         try:
             valid_scene = Scene.model_validate(result)
             return valid_scene.model_dump()
         except ValidationError as e:
             raise HTTPException(status_code=422, detail=f"LLM generated invalid scene data: {str(e)}")
-

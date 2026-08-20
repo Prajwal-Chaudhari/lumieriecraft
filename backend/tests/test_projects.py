@@ -68,40 +68,52 @@ def test_analyze_and_propose(client):
     })
     project_id = create_response.json()["id"]
     
-    # Analyze script
-    script_response = client.post(f"/api/projects/{project_id}/script/analyze")
+    # Propose script standardization
+    proposal_response = client.post(f"/api/projects/{project_id}/script/propose-standardization")
+    assert proposal_response.status_code == 200
+    proposal_id = proposal_response.json()["id"]
+    
+    # Apply standard script
+    script_response = client.post(f"/api/projects/{project_id}/script/proposals/{proposal_id}/apply")
     assert script_response.status_code == 200
     script_data = script_response.json()
+    assert script_data["version"] == 1
     
     # Check scenes
     scenes = script_data.get("scenes", [])
     assert len(scenes) > 0
     scene_id = scenes[0]["id"]
     
-    # Propose scene
+    # Propose scene fix
     regen_response = client.post(
-        f"/api/projects/{project_id}/script/scenes/{scene_id}/propose",
-        json={"instructions": "Make it rain"}
+        f"/api/projects/{project_id}/script/scenes/{scene_id}/propose-fix",
+        json={"base_version": 1, "instructions": "Make it rain"}
     )
     assert regen_response.status_code == 200, regen_response.text
     regen_data = regen_response.json()
     
-    proposed_scene = regen_data.get("proposed_scene")
-    assert proposed_scene is not None
+    scene_proposal_id = regen_data["id"]
+    proposed_script = regen_data.get("proposed_script", {})
+    assert proposed_script is not None
+    
+    proposed_scenes = proposed_script.get("scenes", [])
+    proposed_scene = next((s for s in proposed_scenes if s["id"] == scene_id), None)
+    
     # We are using MockLLMProvider which returns a hardcoded Space Station scene
-    # But ScriptWriterService must preserve the original scene ID and scene_number.
+    # But ScriptDoctorService must preserve the original scene ID and scene_number.
     assert proposed_scene["heading"] == "INT. SPACE STATION - NIGHT"
     assert proposed_scene["scene_number"] == scenes[0]["scene_number"]
     
-    # Apply scene
+    # Apply scene fix
     apply_response = client.post(
-        f"/api/projects/{project_id}/script/scenes/{scene_id}/apply",
-        json={"scene": proposed_scene}
+        f"/api/projects/{project_id}/script/proposals/{scene_proposal_id}/apply"
     )
     assert apply_response.status_code == 200
     apply_data = apply_response.json()
+    assert apply_data["version"] == 2
     
     updated_scenes = apply_data.get("scenes", [])
     updated_scene = next((s for s in updated_scenes if s["id"] == scene_id), None)
     assert updated_scene is not None
     assert updated_scene["heading"] == "INT. SPACE STATION - NIGHT"
+

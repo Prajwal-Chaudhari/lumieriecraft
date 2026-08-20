@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Film, ImageIcon, Wand2, Edit, Save, RefreshCw, ChevronRight, X, Loader2, Camera, MapPin, Users, Lightbulb, Activity, MonitorPlay, Terminal } from "lucide-react";
+import { Film, ImageIcon, Wand2, RefreshCw, Loader2, Camera, Palette, Users, MonitorPlay, Terminal, AlertCircle } from "lucide-react";
 import {
   Project,
   fetchProject,
@@ -10,13 +10,14 @@ import {
   ProductionScene,
   ShotBlueprint,
   StoryboardFrame,
+  CharacterAsset,
   getProduction,
   getProductionScenes,
   getProductionShots,
-  updateShotBlueprint,
   generateStoryboard,
   regenerateStoryboard,
-  getStoryboardShot
+  getStoryboardShot,
+  fetchCharacterAssets
 } from "@/lib/api";
 
 export default function StoryboardWorkspace() {
@@ -26,6 +27,7 @@ export default function StoryboardWorkspace() {
   const [project, setProject] = useState<Project | null>(null);
   const [production, setProduction] = useState<ProductionPlan | null>(null);
   const [scenes, setScenes] = useState<ProductionScene[]>([]);
+  const [characters, setCharacters] = useState<CharacterAsset[]>([]);
   
   const [selectedScene, setSelectedScene] = useState<ProductionScene | null>(null);
   const [shots, setShots] = useState<ShotBlueprint[]>([]);
@@ -36,23 +38,22 @@ export default function StoryboardWorkspace() {
   
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [isEditingShot, setIsEditingShot] = useState(false);
-  const [editedShot, setEditedShot] = useState<Partial<ShotBlueprint>>({});
 
   useEffect(() => {
     if (!projectId) return;
     async function loadData() {
       try {
-        const [proj, prod] = await Promise.all([
+        const [proj, prod, chars] = await Promise.all([
           fetchProject(projectId),
-          getProduction(projectId)
+          getProduction(projectId),
+          fetchCharacterAssets(projectId)
         ]);
         setProject(proj);
         setProduction(prod);
+        setCharacters(chars);
         
         if (prod) {
           const scns = await getProductionScenes(projectId);
-          // Sort by scene number
           scns.sort((a, b) => a.scene_number - b.scene_number);
           setScenes(scns);
           if (scns.length > 0) {
@@ -75,7 +76,7 @@ export default function StoryboardWorkspace() {
     setSelectedFrame(null);
     try {
       const sceneShots = await getProductionShots(projectId, scene.id);
-      sceneShots.sort((a, b) => a.shot_number - b.shot_number);
+      sceneShots.sort((a, b) => parseInt(a.shot_id.replace('shot_', '')) - parseInt(b.shot_id.replace('shot_', '')));
       setShots(sceneShots);
       if (sceneShots.length > 0) {
         handleSelectShot(sceneShots[0]);
@@ -87,11 +88,8 @@ export default function StoryboardWorkspace() {
 
   const handleSelectShot = async (shot: ShotBlueprint) => {
     setSelectedShot(shot);
-    setIsEditingShot(false);
-    setEditedShot({});
     try {
       const shotFrames = await getStoryboardShot(projectId, shot.id);
-      // Sort newest first
       shotFrames.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setFrames(shotFrames);
       if (shotFrames.length > 0) {
@@ -99,18 +97,6 @@ export default function StoryboardWorkspace() {
       } else {
         setSelectedFrame(null);
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleSaveShotEdit = async () => {
-    if (!selectedShot) return;
-    try {
-      const updated = await updateShotBlueprint(projectId, selectedShot.id, editedShot);
-      setSelectedShot(updated);
-      setShots(shots.map(s => s.id === updated.id ? updated : s));
-      setIsEditingShot(false);
     } catch (err) {
       console.error(err);
     }
@@ -143,6 +129,20 @@ export default function StoryboardWorkspace() {
       setGenerating(false);
     }
   };
+  
+  const getSceneColorPlan = () => {
+    if (!production?.scenes_data?.scenes || !selectedScene) return null;
+    const sData = production.scenes_data.scenes.find(s => s.scene_id === selectedScene.id);
+    return sData?.color_plan;
+  };
+  
+  const colorPlan = getSceneColorPlan();
+
+  // Find character references for the current shot subject
+  const getShotCharacterAssets = () => {
+    if (!selectedShot?.subject) return [];
+    return characters.filter(c => selectedShot.subject.toLowerCase().includes(c.character_name.toLowerCase()));
+  };
 
   if (loading) {
     return <div className="p-8 text-gray-400">Loading workspace...</div>;
@@ -159,7 +159,6 @@ export default function StoryboardWorkspace() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-theme(spacing.16))] bg-[#0a0a0c] text-gray-200">
-      {/* Top Header */}
       <header className="h-14 border-b border-gray-800/60 bg-gray-900/40 flex items-center px-6 justify-between flex-shrink-0">
         <div className="flex items-center space-x-4">
           <h1 className="font-bold text-lg text-gray-100 flex items-center">
@@ -176,12 +175,12 @@ export default function StoryboardWorkspace() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Panel: Scene Navigator */}
-        <aside className="w-72 border-r border-gray-800/60 bg-gray-900/20 flex flex-col overflow-y-auto">
+        {/* Left Panel: Scene Navigator & Color Panel */}
+        <aside className="w-72 border-r border-gray-800/60 bg-gray-900/20 flex flex-col overflow-y-auto custom-scrollbar">
           <div className="p-4 border-b border-gray-800/60 sticky top-0 bg-gray-900/90 backdrop-blur z-10">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Scene Navigator</h2>
           </div>
-          <div className="flex flex-col p-2 space-y-1">
+          <div className="flex flex-col p-2 space-y-1 border-b border-gray-800/60 pb-4">
             {scenes.map(scene => (
               <div key={scene.id}>
                 <button
@@ -190,7 +189,7 @@ export default function StoryboardWorkspace() {
                     selectedScene?.id === scene.id ? 'bg-indigo-500/10 text-indigo-300' : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'
                   }`}
                 >
-                  <div className="truncate">Scene {scene.scene_number} — {scene.heading}</div>
+                  <div className="truncate">SC {scene.scene_number} — {scene.heading}</div>
                 </button>
                 {selectedScene?.id === scene.id && (
                   <div className="ml-4 pl-2 border-l border-gray-700 mt-1 space-y-1">
@@ -203,7 +202,7 @@ export default function StoryboardWorkspace() {
                         }`}
                       >
                         <Camera className="w-3 h-3 mr-2" />
-                        Shot {shot.shot_number} — {shot.shot_size}
+                        Shot {shot.shot_id.replace('shot_', '')}
                       </button>
                     ))}
                   </div>
@@ -211,6 +210,36 @@ export default function StoryboardWorkspace() {
               </div>
             ))}
           </div>
+          
+          {/* Color & LUT Panel */}
+          {colorPlan && (
+            <div className="p-4">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center mb-3">
+                <Palette className="w-4 h-4 mr-2" /> COLOR / LUT
+              </h3>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {colorPlan.palette.map((color: any, idx: number) => (
+                    <div key={idx} className="flex flex-col items-center group relative cursor-help">
+                      <div className="w-8 h-8 rounded border border-gray-700 shadow-inner" style={{backgroundColor: color.hex}}></div>
+                      <span className="text-[10px] text-gray-500 mt-1 font-mono uppercase">{color.hex}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 font-mono bg-black/40 p-2 rounded">
+                  {colorPlan.temperature_kelvin && <div>{colorPlan.temperature_kelvin}K</div>}
+                  {colorPlan.contrast && <div>Contrast {colorPlan.contrast}</div>}
+                  {colorPlan.saturation && <div>Saturation {colorPlan.saturation}</div>}
+                </div>
+                {colorPlan.lut && (
+                  <div className="text-xs bg-indigo-500/10 text-indigo-300 p-2 rounded border border-indigo-500/20">
+                    <span className="font-semibold block mb-0.5">LUT: {colorPlan.lut.name}</span>
+                    <span className="text-[10px] text-indigo-400/80 leading-tight block">{colorPlan.lut.reason}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* Center Panel: Visual Canvas */}
@@ -242,21 +271,27 @@ export default function StoryboardWorkspace() {
               </div>
             ) : (
               <div className="relative w-full h-full flex flex-col items-center justify-center">
+                {/* Scene/Shot Overlay */}
+                <div className="absolute top-6 left-6 bg-black/80 backdrop-blur-md px-4 py-2 rounded text-white font-mono border border-gray-800 z-10 shadow-2xl">
+                  <div className="text-sm font-bold text-gray-300">SC {selectedScene?.scene_number.toString().padStart(2, '0')}</div>
+                  <div className="text-xl font-black tracking-widest text-white">SHOT {selectedShot.shot_id.replace('shot_', '').padStart(2, '0')}</div>
+                </div>
+
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={selectedFrame.image_url}
                   alt={`Storyboard variant`}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl ring-1 ring-gray-800"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl ring-1 ring-gray-800 relative z-0"
                 />
                 
                 {/* Generation Prompt Overlay (Expandable) */}
-                <div className="absolute bottom-6 left-6 max-w-xl group">
-                  <div className="bg-black/60 backdrop-blur-md border border-gray-700/50 rounded-lg p-3 overflow-hidden opacity-40 hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-6 left-6 max-w-2xl group z-10">
+                  <div className="bg-black/80 backdrop-blur-xl border border-gray-700/50 rounded-lg p-3 overflow-hidden opacity-40 hover:opacity-100 transition-opacity shadow-2xl">
                     <div className="text-xs font-mono text-gray-400 mb-1 flex items-center">
                       <Terminal className="w-3 h-3 mr-1" />
                       Compiled Generation Prompt
                     </div>
-                    <div className="text-xs text-gray-300 max-h-10 group-hover:max-h-64 overflow-y-auto pr-2 custom-scrollbar transition-all duration-300 whitespace-pre-wrap">
+                    <div className="text-[11px] text-gray-300 max-h-8 group-hover:max-h-96 overflow-y-auto pr-2 custom-scrollbar transition-all duration-300 whitespace-pre-wrap font-mono">
                       {selectedFrame.prompt}
                     </div>
                   </div>
@@ -266,101 +301,103 @@ export default function StoryboardWorkspace() {
           </div>
         </main>
 
-        {/* Right Panel: Shot Editor & Variants */}
-        <aside className="w-96 border-l border-gray-800/60 bg-gray-900/30 flex flex-col overflow-y-auto">
+        {/* Right Panel: Shot Blueprint & References */}
+        <aside className="w-96 border-l border-gray-800/60 bg-gray-900/30 flex flex-col overflow-y-auto custom-scrollbar">
           {selectedShot ? (
             <>
-              {/* Shot Blueprint Header */}
+              {/* Cinematography Panel */}
               <div className="p-5 border-b border-gray-800/60">
-                <div className="flex justify-between items-start mb-4">
-                  <h2 className="text-lg font-bold text-gray-200 flex items-center">
-                    <Camera className="w-4 h-4 mr-2 text-gray-400" />
-                    Shot {selectedShot.shot_number}
-                  </h2>
-                  <div className="flex space-x-2">
-                    {!isEditingShot ? (
-                      <button onClick={() => { setEditedShot(selectedShot); setIsEditingShot(true); }} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <>
-                        <button onClick={handleSaveShotEdit} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded flex items-center text-xs font-medium">
-                          <Save className="w-3 h-3 mr-1" /> Save
-                        </button>
-                        <button onClick={() => setIsEditingShot(false)} className="p-1.5 text-gray-500 hover:bg-gray-800 rounded">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
+                <h2 className="text-lg font-bold text-gray-200 flex items-center mb-4">
+                  <Camera className="w-4 h-4 mr-2 text-indigo-400" />
+                  Cinematography
+                </h2>
+
+                <div className="space-y-4">
+                  <div className="flex gap-2 flex-wrap">
+                    <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded border border-gray-700">{selectedShot.shot_size}</span>
+                    <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded border border-gray-700">{selectedShot.camera?.angle}</span>
+                    {selectedShot.camera?.focal_length_mm && (
+                      <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded border border-gray-700">{selectedShot.camera.focal_length_mm}mm</span>
                     )}
                   </div>
-                </div>
+                  
+                  <div>
+                    <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
+                      <MonitorPlay className="w-3 h-3 mr-1" /> Action & Blocking
+                    </h4>
+                    <p className="text-sm text-gray-300">{selectedShot.subject}</p>
+                    {selectedShot.character_actions && <p className="text-xs text-gray-400 mt-1 italic">{selectedShot.character_actions}</p>}
+                    {selectedShot.blocking?.subject_position && <p className="text-[11px] text-gray-500 mt-1 font-mono">Pos: {selectedShot.blocking.subject_position}</p>}
+                  </div>
 
-                {isEditingShot ? (
-                  <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Shot Size</label>
-                      <input type="text" value={editedShot.shot_size || ''} onChange={e => setEditedShot({...editedShot, shot_size: e.target.value})} className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1" />
+                      <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Lighting</h4>
+                      <p className="text-xs text-gray-300">{selectedShot.lighting?.setup}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{selectedShot.lighting?.direction}</p>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Camera Angle</label>
-                      <input type="text" value={editedShot.camera_angle || ''} onChange={e => setEditedShot({...editedShot, camera_angle: e.target.value})} className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1" />
+                      <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Composition</h4>
+                      <p className="text-xs text-gray-300">{selectedShot.composition?.rule_of_thirds ? "Rule of Thirds" : "Center"}</p>
+                      {selectedShot.composition?.negative_space && <p className="text-[10px] text-gray-400 mt-0.5">Space: {selectedShot.composition.negative_space}</p>}
                     </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Lens</label>
-                      <input type="text" value={editedShot.lens || ''} onChange={e => setEditedShot({...editedShot, lens: e.target.value})} className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Lighting</label>
-                      <textarea value={editedShot.lighting || ''} onChange={e => setEditedShot({...editedShot, lighting: e.target.value})} className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1 text-xs h-16" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Purpose</label>
-                      <textarea value={editedShot.purpose || ''} onChange={e => setEditedShot({...editedShot, purpose: e.target.value})} className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1 text-xs h-16" />
-                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/30 p-3 rounded-md border border-gray-800">
+                    <h4 className="text-[10px] font-semibold text-indigo-400/80 uppercase tracking-wider mb-1">Director's Purpose</h4>
+                    <p className="text-xs text-gray-300 italic leading-relaxed">"{selectedShot.purpose}"</p>
+                    <p className="text-[10px] font-mono text-gray-500 mt-2">BEAT: {selectedShot.story_beat}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Character References Panel */}
+              <div className="p-5 border-b border-gray-800/60">
+                <h3 className="text-sm font-semibold text-gray-300 flex items-center mb-4">
+                  <Users className="w-4 h-4 mr-2 text-indigo-400" />
+                  Character References
+                </h3>
+                
+                {getShotCharacterAssets().length > 0 ? (
+                  <div className="space-y-4">
+                    {getShotCharacterAssets().map(asset => (
+                      <div key={asset.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                        <div className="flex items-center space-x-3 mb-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={asset.file_path} alt={asset.character_name} className="w-10 h-10 rounded object-cover border border-gray-700" />
+                          <div>
+                            <div className="text-sm font-bold text-gray-200">{asset.character_name}</div>
+                            <div className="text-[10px] text-gray-500 uppercase">Resolved</div>
+                          </div>
+                        </div>
+                        <div className="bg-orange-900/20 border border-orange-900/50 rounded p-2 flex items-start">
+                          <AlertCircle className="w-3 h-3 text-orange-500 mr-1.5 mt-0.5 flex-shrink-0" />
+                          <p className="text-[10px] text-orange-200/80 leading-tight">
+                            Conditioning: Not supported by current provider in V1
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <div className="flex gap-2">
-                      <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded">{selectedShot.shot_size}</span>
-                      <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded">{selectedShot.camera_angle}</span>
-                      <span className="px-2 py-1 bg-gray-800 text-gray-300 text-xs font-semibold rounded">{selectedShot.lens}</span>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-                        <MonitorPlay className="w-3 h-3 mr-1" /> Action & Subject
-                      </h4>
-                      <p className="text-sm text-gray-300">{selectedShot.subject}</p>
-                      <p className="text-xs text-gray-400 mt-1 italic">{selectedShot.character_actions}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 flex items-center">
-                        <Lightbulb className="w-3 h-3 mr-1" /> Lighting & Composition
-                      </h4>
-                      <p className="text-sm text-gray-300">{selectedShot.lighting}</p>
-                      <p className="text-xs text-gray-400 mt-1">{selectedShot.composition}</p>
-                    </div>
-
-                    <div className="bg-gray-800/30 p-3 rounded-md border border-gray-800">
-                      <h4 className="text-xs font-semibold text-indigo-400/80 uppercase tracking-wider mb-1">Director's Purpose</h4>
-                      <p className="text-sm text-gray-300 italic">"{selectedShot.purpose}"</p>
-                    </div>
-                  </div>
+                  <div className="text-xs text-gray-500 italic">No character references found for the subject in this shot.</div>
                 )}
               </div>
 
               {/* Variants Section */}
-              <div className="p-5 flex-1 flex flex-col overflow-hidden">
+              <div className="p-5 flex-1 flex flex-col min-h-[300px]">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Variants</h3>
+                  <h3 className="text-sm font-semibold text-gray-300 flex items-center">
+                    <RefreshCw className="w-4 h-4 mr-2 text-indigo-400" />
+                    Variants
+                  </h3>
                   {frames.length > 0 && (
                     <button
                       onClick={handleRegenerate}
                       disabled={generating}
-                      className="text-xs flex items-center px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors disabled:opacity-50"
+                      className="text-xs flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded transition-colors disabled:opacity-50"
                     >
-                      <RefreshCw className={`w-3 h-3 mr-1 ${generating ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3 h-3 mr-1.5 ${generating ? 'animate-spin' : ''}`} />
                       Regenerate
                     </button>
                   )}
@@ -368,7 +405,7 @@ export default function StoryboardWorkspace() {
 
                 <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                   {frames.length === 0 && !generating && (
-                    <div className="text-xs text-gray-500 text-center py-4 italic">No variants yet.</div>
+                    <div className="text-xs text-gray-500 text-center py-4 italic border border-dashed border-gray-800 rounded-lg">No variants yet. Click Generate Frame.</div>
                   )}
                   {frames.map((frame, idx) => (
                     <div
@@ -399,9 +436,9 @@ export default function StoryboardWorkspace() {
                       </div>
                       
                       {/* Mini thumbnail */}
-                      <div className="h-24 w-full bg-black rounded overflow-hidden">
+                      <div className="h-28 w-full bg-black rounded border border-gray-800 overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={frame.image_url} className="w-full h-full object-cover opacity-80" alt="Thumbnail" />
+                        <img src={frame.image_url} className="w-full h-full object-cover opacity-80 hover:opacity-100 transition-opacity" alt="Thumbnail" />
                       </div>
                     </div>
                   ))}

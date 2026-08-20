@@ -22,57 +22,59 @@ class MockLLMProvider(LLMProvider):
                 "metadata": {}
             }
 
-        # Production Intelligence - Global Bibles
-        if "characters" in schema.get("properties", {}) and "locations" in schema.get("properties", {}):
-            return {
-                "characters": [
-                    {
-                        "name": "ASTRONAUT",
-                        "appearance": "Tired",
-                        "established_facts": ["Wears a flight suit"],
-                        "proposed_facts": ["Has been alone for months"],
-                        "source_scene_ids": ["scene_1"]
-                    }
-                ],
-                "locations": [
-                    {
-                        "name": "SPACE STATION",
-                        "description": "Cold, blue emergency lights",
-                        "established_facts": ["Emergency lights flicker"],
-                        "proposed_facts": ["Power is failing"],
-                        "source_scene_ids": ["scene_1"]
-                    }
-                ]
-            }
-
-        # Production Intelligence - Scene Breakdown
-        if "location" in schema.get("properties", {}) and "emotional_beat" in schema.get("properties", {}):
-            return {
-                "location": "SPACE STATION",
-                "time_of_day": "NIGHT",
-                "characters": ["ASTRONAUT"],
-                "actions": ["Stares at blinking light"],
-                "dialogue_summary": "Astronaut mutters to himself",
-                "props": ["blinking light console"],
-                "emotional_beat": "Despair and suspense",
-                "narrative_purpose": "Establishes isolation"
-            }
-
         # Production Intelligence - Cinematography
-        if "shots" in schema.get("properties", {}):
+        if "scenes" in schema.get("properties", {}) and "visual_goal" in schema.get("properties", {}).get("scenes", {}).get("items", {}).get("properties", {}):
             return {
-                "shots": [
+                "scenes": [
                     {
-                        "shot_id": "shot_1",
-                        "purpose": "Show isolation",
-                        "story_beat": "Establishes isolation",
-                        "shot_size": "Wide",
-                        "camera_angle": "High",
-                        "lens": "24mm",
-                        "lighting": "Cold blue",
-                        "camera_movement": "Slow push in",
-                        "subject": "Astronaut at console",
-                        "emotion": "Lonely"
+                        "scene_id": "scene_1",
+                        "visual_goal": "Establish isolation",
+                        "overall_mood": "Lonely",
+                        "color_plan": {
+                            "palette": [
+                                {"hex": "#0000FF", "role": "Key Light", "description": "Cold blue"}
+                            ],
+                            "temperature_kelvin": 6500,
+                            "contrast": 1.5,
+                            "saturation": 0.8,
+                            "mood": "Cold",
+                            "film_look": "Kodak Vision3",
+                            "lut": {
+                                "name": "SciFi Blue",
+                                "type": "Creative",
+                                "reason": "Enhance coldness"
+                            }
+                        },
+                        "shots": [
+                            {
+                                "shot_id": "scene_1_shot_1",
+                                "purpose": "Show isolation",
+                                "story_beat": "Establishes isolation",
+                                "shot_size": "Wide",
+                                "camera": {
+                                    "angle": "High",
+                                    "focal_length_mm": 24,
+                                    "lens_type": "Spherical",
+                                    "movement": "Slow push in"
+                                },
+                                "blocking": {
+                                    "subject_position": "Center",
+                                    "gaze_direction": "Down",
+                                    "character_interaction": "None"
+                                },
+                                "composition": {
+                                    "rule_of_thirds": True,
+                                    "symmetry": True
+                                },
+                                "lighting": {
+                                    "setup": "Top lit",
+                                    "direction": "Overhead",
+                                    "intensity": "Low"
+                                },
+                                "subject": "Astronaut at console",
+                                "emotion": "Lonely"
+                            }
+                        ]
                     }
                 ]
             }

@@ -72,14 +72,14 @@ export default function ProjectDashboardPage() {
           </div>
         </Link>
 
-        {/* Production Plan Card */}
-        <Link href={`/projects/${project.id}/production`} className="block group">
+        {/* Cinematography Card */}
+        <Link href={`/projects/${project.id}/cinematography`} className="block group">
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-indigo-500 hover:shadow-lg transition-all h-full flex flex-col">
             <div className="mb-4">
-              <h2 className="text-2xl font-bold text-gray-100 group-hover:text-indigo-400 transition-colors">Production Plan</h2>
+              <h2 className="text-2xl font-bold text-gray-100 group-hover:text-indigo-400 transition-colors">Cinematography & Color</h2>
             </div>
             <p className="text-gray-400 text-sm mb-6 flex-grow">
-              Review Scene Breakdowns, Character & World Bibles, and Cinematography Shot Blueprints generated from your approved script.
+              Review Scene Visual Plans, Color Palettes, and Cinematography Shot Blueprints generated from your approved script.
             </p>
             <div className="mt-auto flex justify-end">
               <span className="text-indigo-400 text-sm font-medium group-hover:translate-x-1 transition-transform">

@@ -18,6 +18,8 @@ class GenerationRequest(BaseModel):
     seed: int | None = None
 
     style: str | None = None
+    
+    model: str | None = None
 
     mode: Literal[
         "storyboard_sketch",

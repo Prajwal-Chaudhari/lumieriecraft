@@ -43,3 +43,16 @@ class Script(ScriptBase, table=True):
 
 class ScriptCreate(ScriptBase):
     pass
+
+class ScriptProposalBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    base_script_version: int = 1
+    status: str = "PENDING"  # PENDING, APPLIED, REJECTED
+
+class ScriptProposal(ScriptProposalBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    proposed_script: dict = Field(default={}, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ScriptProposalCreate(ScriptProposalBase):
+    proposed_script: dict

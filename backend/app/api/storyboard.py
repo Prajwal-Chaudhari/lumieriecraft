@@ -3,9 +3,9 @@ from sqlmodel import Session, select
 from typing import List, Optional
 
 from app.db import get_session
-from app.models.project import Project
+from app.models.project import Project, CharacterAsset
 from app.models.production import (
-    ProductionPlan, CharacterBible, WorldBible, SceneBreakdown, ShotBlueprint,
+    ProductionPlan, ShotBlueprint,
     StoryboardFrame, ShotStatus
 )
 from app.models.script import Script
@@ -24,18 +24,20 @@ async def _generate_storyboard_background(shot_id: str, script_version: int, db:
         if not shot:
             return
 
-        breakdown = db.get(SceneBreakdown, shot.scene_breakdown_id)
         plan = db.get(ProductionPlan, shot.production_plan_id)
         project = db.get(Project, plan.project_id)
 
-        characters = db.exec(select(CharacterBible).where(CharacterBible.production_plan_id == plan.id)).all()
-        world = db.exec(select(WorldBible).where(WorldBible.production_plan_id == plan.id)).first()
+        # Get the actual scene dictionary from the script
+        script = db.get(Script, plan.script_id)
+        scene = next((s for s in script.scenes if s.get("id") == shot.scene_id), {})
+
+        # Get the character assets for the project
+        characters = db.exec(select(CharacterAsset).where(CharacterAsset.project_id == plan.project_id)).all()
 
         frame = await service.generate_storyboard(
             shot=shot,
-            scene=breakdown,
+            scene=scene,
             characters=characters,
-            world=world,
             project=project,
             script_version=script_version
         )

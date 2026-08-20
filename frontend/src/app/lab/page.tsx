@@ -35,6 +35,7 @@ export default function ImageGenerationLab() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    setResult(null); // Clear previous active image
     setIsGenerating(true);
     setError(null);
     try {

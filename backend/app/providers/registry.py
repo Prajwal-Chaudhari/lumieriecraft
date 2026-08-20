@@ -23,6 +23,14 @@ class ProviderRegistry:
             except Exception:
                 pass
 
+        # Attempt to register Fal if key exists
+        if os.getenv("FAL_KEY"):
+            try:
+                from app.providers.fal_provider import FalProvider
+                self.register("fal", FalProvider())
+            except Exception:
+                pass
+
     def register(self, name: str, provider: ImageGenerationProvider):
         self._providers[name] = provider
 

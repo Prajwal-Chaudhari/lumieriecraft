@@ -51,7 +51,7 @@ export default function ProjectsPage() {
                 <p className="text-gray-400 text-sm mb-4 line-clamp-3 flex-grow">{p.story_idea}</p>
                 <div className="flex text-xs text-gray-500 justify-between items-center mt-auto pt-4 border-t border-gray-700">
                   <span>{p.duration}</span>
-                  <span>{new Date(p.created_at).toLocaleDateString()}</span>
+                  <span>{p.created_at ? new Date(p.created_at).toLocaleDateString() : "Created recently"}</span>
                 </div>
               </div>
             </Link>

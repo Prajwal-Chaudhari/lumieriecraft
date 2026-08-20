@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column, JSON
 import uuid
+from datetime import datetime
 
 class ProjectBase(SQLModel):
     name: str
@@ -25,3 +26,17 @@ class ProjectUpdate(SQLModel):
     duration: Optional[str] = None
     tone: Optional[str] = None
     visual_style: Optional[str] = None
+
+class CharacterAssetBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    character_id: Optional[str] = None
+    character_name: str
+    asset_type: str = Field(default="image")
+    file_path: str
+    source: str = Field(description="'user_upload' or 'ai_generated'")
+    description: Optional[str] = None
+    continuity_notes: Optional[str] = None
+
+class CharacterAsset(CharacterAssetBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

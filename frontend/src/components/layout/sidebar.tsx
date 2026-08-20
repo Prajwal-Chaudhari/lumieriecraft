@@ -38,14 +38,6 @@ export function Sidebar() {
         )}
 
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-6 mb-2 px-3">
-          AI AGENTS
-        </div>
-        <LinkItem href="/agents/writer" icon={Bot}>Script Writer</LinkItem>
-        <LinkItem href="/agents/storyboard" icon={Wand2}>Storyboard Agent</LinkItem>
-        <LinkItem href="/agents/cinematography" icon={Camera}>Cinematography</LinkItem>
-        <LinkItem href="/agents/continuity" icon={Film}>Continuity</LinkItem>
-
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-6 mb-2 px-3">
           DEVELOPER
         </div>
         <LinkItem href="/lab" icon={ImageIcon}>Image Generation Lab</LinkItem>
