@@ -15,6 +15,7 @@ from app.api.generations import router as generations_router
 from app.api.projects import router as projects_router
 from app.api.cinematography import router as cinematography_router
 from app.api.storyboard import router as storyboard_router
+from app.api.production import router as production_router
 from app.db import create_db_and_tables
 from app.services.image_generation_service import ImageGenerationService
 from app.providers.registry import ProviderRegistry
@@ -58,8 +59,22 @@ app.include_router(system_router, prefix="/api")
 app.include_router(providers_router, prefix="/api")
 app.include_router(generations_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
+app.include_router(production_router, prefix="/api")
 app.include_router(cinematography_router, prefix="/api")
 app.include_router(storyboard_router, prefix="/api")
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Print the traceback so it still shows up in the backend logs
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "message": str(exc)},
+    )
 
 if __name__ == "__main__":
     import uvicorn
