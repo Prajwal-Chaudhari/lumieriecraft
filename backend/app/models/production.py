@@ -19,7 +19,7 @@ class ProductionPlanBase(SQLModel):
     script_id: str = Field(foreign_key="script.id")
     script_version: int
     status: str = Field(default=ProductionStatus.NOT_PLANNED)
-    scenes_data: dict = Field(default={}, sa_column=Column(JSON)) # Stores SceneVisualPlans minus the shots
+    scenes_data: dict = Field(default_factory=dict, sa_column=Column(JSON)) # Stores SceneVisualPlans minus the shots
 
 class ProductionPlan(ProductionPlanBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
@@ -32,7 +32,7 @@ class CinematographyProposal(SQLModel, table=True):
     project_id: str = Field(foreign_key="project.id")
     script_id: str = Field(foreign_key="script.id")
     script_version: int
-    proposed_plan: dict = Field(default={}, sa_column=Column(JSON)) # CinematographyPlanSchema
+    proposed_plan: dict = Field(default_factory=dict, sa_column=Column(JSON)) # CinematographyPlanSchema
     status: str = Field(default="PENDING")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -76,3 +76,61 @@ class StoryboardFrameBase(SQLModel):
 class StoryboardFrame(StoryboardFrameBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class CharacterBibleBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    name: str
+    description: Optional[str] = None
+    appearance: Optional[str] = None
+    personality: Optional[str] = None
+    clothing: Optional[str] = None
+    hair: Optional[str] = None
+    accessories: Optional[str] = None
+    established_facts: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    inferred_facts: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    continuity_notes: Optional[str] = None
+    source_scene_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    reference_images: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+
+class CharacterBible(CharacterBibleBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class WorldBibleBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    name: str
+    description: Optional[str] = None
+    architecture: Optional[str] = None
+    lighting_characteristics: Optional[str] = None
+    time_variants: Optional[str] = None
+    recurring_props: Optional[str] = None
+    established_facts: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    inferred_facts: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    continuity_notes: Optional[str] = None
+    source_scene_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+
+class WorldBible(WorldBibleBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class SceneBreakdownBase(SQLModel):
+    project_id: str = Field(foreign_key="project.id")
+    script_id: str = Field(foreign_key="script.id")
+    scene_id: str
+    location: Optional[str] = None
+    time_of_day: Optional[str] = None
+    story_beat: Optional[str] = None
+    emotional_beat: Optional[str] = None
+    narrative_purpose: Optional[str] = None
+    props: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    visual_context: Optional[str] = None
+    continuity_notes: Optional[str] = None
+    # Inference/provenance could be stored directly here or in a separate JSON field
+    inference_provenance: dict = Field(default_factory=dict, sa_column=Column(JSON))
+
+class SceneBreakdown(SceneBreakdownBase, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

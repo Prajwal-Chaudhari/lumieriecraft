@@ -3,6 +3,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+load_dotenv(dotenv_path=env_path)
 
 from app.api.health import router as health_router
 from app.api.system import router as system_router
@@ -29,8 +33,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# No CORS middleware by default, as per Correction 1.
-# Can be added here in the future if direct browser-to-FastAPI access is required.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000", "http://127.0.0.1:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Setup singleton services
 registry = ProviderRegistry()

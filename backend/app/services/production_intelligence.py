@@ -3,25 +3,24 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from app.models.production import (
-    ProductionPlan, CharacterBible, WorldBible, SceneBreakdown, ShotBlueprint,
-    ProductionStatus, ShotStatus
+    CharacterBible, WorldBible, SceneBreakdown
 )
 from app.models.script import Script, Scene
 from app.providers.registry import ProviderRegistry
+from app.providers.llm.registry import get_llm_provider
 
 # --- Pydantic Schemas for Structured Output ---
 
 class CharacterExtraction(BaseModel):
     name: str
+    description: Optional[str] = None
     appearance: Optional[str] = None
-    age_range: Optional[str] = None
-    hair: Optional[str] = None
-    clothing: Optional[str] = None
-    accessories: Optional[str] = None
     personality: Optional[str] = None
-    relationships: Optional[str] = None
+    clothing: Optional[str] = None
+    hair: Optional[str] = None
+    accessories: Optional[str] = None
     established_facts: List[str] = Field(default_factory=list)
-    proposed_facts: List[str] = Field(default_factory=list)
+    inferred_facts: List[str] = Field(default_factory=list)
     continuity_notes: Optional[str] = None
     source_scene_ids: List[str] = Field(default_factory=list)
 
@@ -29,12 +28,11 @@ class WorldExtraction(BaseModel):
     name: str
     description: Optional[str] = None
     architecture: Optional[str] = None
-    environment: Optional[str] = None
     lighting_characteristics: Optional[str] = None
     time_variants: Optional[str] = None
-    important_props: Optional[str] = None
+    recurring_props: Optional[str] = None
     established_facts: List[str] = Field(default_factory=list)
-    proposed_facts: List[str] = Field(default_factory=list)
+    inferred_facts: List[str] = Field(default_factory=list)
     continuity_notes: Optional[str] = None
     source_scene_ids: List[str] = Field(default_factory=list)
 
@@ -45,45 +43,53 @@ class GlobalExtractionResult(BaseModel):
 class SceneBreakdownExtraction(BaseModel):
     location: Optional[str] = None
     time_of_day: Optional[str] = None
-    characters: List[str] = Field(default_factory=list)
-    actions: List[str] = Field(default_factory=list)
-    dialogue_summary: Optional[str] = None
-    props: List[str] = Field(default_factory=list)
+    story_beat: Optional[str] = None
     emotional_beat: Optional[str] = None
     narrative_purpose: Optional[str] = None
+    props: List[str] = Field(default_factory=list)
+    visual_context: Optional[str] = None
     continuity_notes: Optional[str] = None
-
-class ShotExtraction(BaseModel):
-    shot_id: str
-    purpose: str
-    story_beat: str
-    shot_size: Optional[str] = None
-    camera_angle: Optional[str] = None
-    lens: Optional[str] = None
-    composition: Optional[str] = None
-    lighting: Optional[str] = None
-    camera_movement: Optional[str] = None
-    subject: Optional[str] = None
-    character_actions: Optional[str] = None
-    emotion: Optional[str] = None
-    visual_prompt: Optional[str] = None
-
-class CinematographyResult(BaseModel):
-    shots: List[ShotExtraction] = Field(default_factory=list)
-
-from app.providers.llm.registry import get_llm_provider
+    inference_provenance: Dict[str, Any] = Field(default_factory=dict)
 
 # --- Service Class ---
 
+import asyncio
+import logging
+
+async def _generate_with_retry(provider, prompt: str, response_schema: dict) -> dict:
+    max_retries = 3
+    base_delay = 2.0
+    
+    for attempt in range(max_retries):
+        try:
+            return await provider.generate_json(prompt, response_schema)
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Check for transient errors
+            is_transient = any(code in error_msg for code in ["429", "500", "502", "503", "504"])
+            
+            if not is_transient or attempt == max_retries - 1:
+                raise ValueError(f"LLM Provider Error: {error_msg}")
+            
+            delay = base_delay * (2 ** attempt)
+            logging.warning(f"Transient LLM error. Retrying in {delay}s (Attempt {attempt+1}/{max_retries})...")
+            await asyncio.sleep(delay)
+
 class ProductionIntelligenceService:
     def __init__(self, provider_registry: ProviderRegistry = None):
-        # We don't actually need ProviderRegistry for LLM since we use get_llm_provider()
         self.get_llm = get_llm_provider
 
-    async def extract_global_bibles(self, script: Script) -> GlobalExtractionResult:
+    async def extract_global_bibles(self, db: Session, script: Script) -> GlobalExtractionResult:
+        """
+        Extracts Character and World bibles from the script and upserts them into the database.
+        Returns the extracted Pydantic models.
+        """
+        if script.status != "approved":
+            raise ValueError("Script must be approved before global bible extraction.")
+
         provider = self.get_llm()
         
-        # Serialize the entire script to pass to Gemini
         script_text = ""
         for scene_dict in script.scenes:
             scene = Scene.model_validate(scene_dict)
@@ -96,15 +102,14 @@ class ProductionIntelligenceService:
                 script_text += f"{dialogue.character}: {dialogue.text}\n"
 
         prompt = f"""You are a professional production breakdown agent.
-Analyze the following script globally. Extract all significant characters and locations to form the Character Bible and World Bible.
-For each, clearly separate 'established_facts' (explicitly stated in the script) from 'proposed_facts' (your logical inferences/suggestions for production).
-Track 'source_scene_ids' for where they appear.
+Analyze the following approved screenplay globally. Extract all significant characters and locations to form the Character Bible and World Bible.
+For each, clearly separate 'established_facts' (explicitly stated in the screenplay text) from 'inferred_facts' (your logical inferences/suggestions for production).
+DO NOT treat AI inference as established canon.
+Track 'source_scene_ids' as a list of strings for where they appear.
 
-Script:
+Screenplay:
 {script_text}
 """
-        # Note: We need a manual response_schema for Gemini. Since Pydantic nested schemas
-        # with Gemini SDK can be tricky, we define the raw dict format matching the Pydantic schema.
         response_schema = {
             "type": "OBJECT",
             "properties": {
@@ -114,15 +119,14 @@ Script:
                         "type": "OBJECT",
                         "properties": {
                             "name": {"type": "STRING"},
+                            "description": {"type": "STRING", "nullable": True},
                             "appearance": {"type": "STRING", "nullable": True},
-                            "age_range": {"type": "STRING", "nullable": True},
-                            "hair": {"type": "STRING", "nullable": True},
-                            "clothing": {"type": "STRING", "nullable": True},
-                            "accessories": {"type": "STRING", "nullable": True},
                             "personality": {"type": "STRING", "nullable": True},
-                            "relationships": {"type": "STRING", "nullable": True},
+                            "clothing": {"type": "STRING", "nullable": True},
+                            "hair": {"type": "STRING", "nullable": True},
+                            "accessories": {"type": "STRING", "nullable": True},
                             "established_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
-                            "proposed_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "inferred_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
                             "continuity_notes": {"type": "STRING", "nullable": True},
                             "source_scene_ids": {"type": "ARRAY", "items": {"type": "STRING"}}
                         },
@@ -137,12 +141,11 @@ Script:
                             "name": {"type": "STRING"},
                             "description": {"type": "STRING", "nullable": True},
                             "architecture": {"type": "STRING", "nullable": True},
-                            "environment": {"type": "STRING", "nullable": True},
                             "lighting_characteristics": {"type": "STRING", "nullable": True},
                             "time_variants": {"type": "STRING", "nullable": True},
-                            "important_props": {"type": "STRING", "nullable": True},
+                            "recurring_props": {"type": "STRING", "nullable": True},
                             "established_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
-                            "proposed_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "inferred_facts": {"type": "ARRAY", "items": {"type": "STRING"}},
                             "continuity_notes": {"type": "STRING", "nullable": True},
                             "source_scene_ids": {"type": "ARRAY", "items": {"type": "STRING"}}
                         },
@@ -152,13 +155,62 @@ Script:
             }
         }
         
-        result = await provider.generate_json(prompt, response_schema)
+        result = await _generate_with_retry(provider, prompt, response_schema)
         try:
-            return GlobalExtractionResult.model_validate(result)
+            extraction = GlobalExtractionResult.model_validate(result)
         except Exception as e:
             raise ValueError(f"Failed to parse LLM global extraction: {e}")
 
-    async def analyze_scene_for_production(self, scene: Scene, global_bibles: GlobalExtractionResult) -> SceneBreakdownExtraction:
+        # Upsert Characters
+        for char_data in extraction.characters:
+            normalized_name = char_data.name.strip().upper()
+            existing_char = db.exec(
+                select(CharacterBible).where(
+                    CharacterBible.project_id == script.project_id,
+                    CharacterBible.name == normalized_name
+                )
+            ).first()
+
+            if existing_char:
+                for k, v in char_data.model_dump().items():
+                    setattr(existing_char, k, v)
+                existing_char.name = normalized_name # ensure normalization
+                db.add(existing_char)
+            else:
+                new_char = CharacterBible(project_id=script.project_id, **char_data.model_dump())
+                new_char.name = normalized_name
+                db.add(new_char)
+
+        # Upsert Locations (World)
+        for loc_data in extraction.locations:
+            normalized_name = loc_data.name.strip().upper()
+            existing_loc = db.exec(
+                select(WorldBible).where(
+                    WorldBible.project_id == script.project_id,
+                    WorldBible.name == normalized_name
+                )
+            ).first()
+
+            if existing_loc:
+                for k, v in loc_data.model_dump().items():
+                    setattr(existing_loc, k, v)
+                existing_loc.name = normalized_name
+                db.add(existing_loc)
+            else:
+                new_loc = WorldBible(project_id=script.project_id, **loc_data.model_dump())
+                new_loc.name = normalized_name
+                db.add(new_loc)
+
+        db.commit()
+        return extraction
+
+    async def analyze_scene_for_production(self, db: Session, script: Script, scene: Scene, global_bibles: GlobalExtractionResult) -> SceneBreakdownExtraction:
+        """
+        Analyzes a scene for production intelligence (derived information) and upserts it.
+        """
+        if script.status != "approved":
+            raise ValueError("Script must be approved before scene breakdown extraction.")
+
         provider = self.get_llm()
         
         scene_text = f"SCENE {scene.scene_number}: {scene.heading}\nDescription: {scene.description}\n"
@@ -168,8 +220,10 @@ Script:
             scene_text += f"{dialogue.character}: {dialogue.text}\n"
 
         prompt = f"""You are a professional production breakdown agent.
-Analyze the following scene. Provide a scene breakdown (location, characters, props, actions, emotional beat, narrative purpose, continuity notes).
-Use the following global context (Character & World Bibles) to ensure consistency and pull relevant continuity facts.
+Analyze the following scene from the approved screenplay. 
+DO NOT duplicate the actions, dialogue, or scene description. Provide derived production intelligence: 
+location context, time of day, story beat, emotional beat, narrative purpose, visual context, props, and continuity notes.
+Use the global context (Character & World Bibles) to ensure consistency.
 
 Global Context:
 {global_bibles.model_dump_json(indent=2)}
@@ -182,72 +236,43 @@ Scene to Analyze:
             "properties": {
                 "location": {"type": "STRING", "nullable": True},
                 "time_of_day": {"type": "STRING", "nullable": True},
-                "characters": {"type": "ARRAY", "items": {"type": "STRING"}},
-                "actions": {"type": "ARRAY", "items": {"type": "STRING"}},
-                "dialogue_summary": {"type": "STRING", "nullable": True},
-                "props": {"type": "ARRAY", "items": {"type": "STRING"}},
+                "story_beat": {"type": "STRING", "nullable": True},
                 "emotional_beat": {"type": "STRING", "nullable": True},
                 "narrative_purpose": {"type": "STRING", "nullable": True},
-                "continuity_notes": {"type": "STRING", "nullable": True}
+                "props": {"type": "ARRAY", "items": {"type": "STRING"}},
+                "visual_context": {"type": "STRING", "nullable": True},
+                "continuity_notes": {"type": "STRING", "nullable": True},
+                "inference_provenance": {"type": "OBJECT", "nullable": True}
             }
         }
 
-        result = await provider.generate_json(prompt, response_schema)
+        result = await _generate_with_retry(provider, prompt, response_schema)
         try:
-            return SceneBreakdownExtraction.model_validate(result)
+            extraction = SceneBreakdownExtraction.model_validate(result)
         except Exception as e:
             raise ValueError(f"Failed to parse LLM scene breakdown: {e}")
 
-    async def generate_cinematography(self, scene_breakdown: SceneBreakdown, global_bibles: GlobalExtractionResult) -> CinematographyResult:
-        provider = self.get_llm()
-        
-        prompt = f"""You are a professional Director of Photography.
-Generate a cinematic Shot Blueprint for the following scene.
-Explain WHY each shot is necessary using 'purpose' and 'story_beat'.
-Provide shot sizes, angles, lenses, composition, lighting, camera movement, and visual prompts for each shot.
+        # Upsert SceneBreakdown
+        existing_breakdown = db.exec(
+            select(SceneBreakdown).where(
+                SceneBreakdown.project_id == script.project_id,
+                SceneBreakdown.script_id == script.id,
+                SceneBreakdown.scene_id == scene.id
+            )
+        ).first()
 
-Scene Breakdown:
-Location: {scene_breakdown.location}
-Time: {scene_breakdown.time_of_day}
-Characters: {scene_breakdown.characters}
-Actions: {scene_breakdown.actions}
-Emotional Beat: {scene_breakdown.emotional_beat}
-Narrative Purpose: {scene_breakdown.narrative_purpose}
-Continuity Notes: {scene_breakdown.continuity_notes}
+        if existing_breakdown:
+            for k, v in extraction.model_dump().items():
+                setattr(existing_breakdown, k, v)
+            db.add(existing_breakdown)
+        else:
+            new_breakdown = SceneBreakdown(
+                project_id=script.project_id,
+                script_id=script.id,
+                scene_id=scene.id,
+                **extraction.model_dump()
+            )
+            db.add(new_breakdown)
 
-Global Context (Characters & Worlds):
-{global_bibles.model_dump_json(indent=2)}
-"""
-        response_schema = {
-            "type": "OBJECT",
-            "properties": {
-                "shots": {
-                    "type": "ARRAY",
-                    "items": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "shot_id": {"type": "STRING"},
-                            "purpose": {"type": "STRING"},
-                            "story_beat": {"type": "STRING"},
-                            "shot_size": {"type": "STRING", "nullable": True},
-                            "camera_angle": {"type": "STRING", "nullable": True},
-                            "lens": {"type": "STRING", "nullable": True},
-                            "composition": {"type": "STRING", "nullable": True},
-                            "lighting": {"type": "STRING", "nullable": True},
-                            "camera_movement": {"type": "STRING", "nullable": True},
-                            "subject": {"type": "STRING", "nullable": True},
-                            "character_actions": {"type": "STRING", "nullable": True},
-                            "emotion": {"type": "STRING", "nullable": True},
-                            "visual_prompt": {"type": "STRING", "nullable": True}
-                        },
-                        "required": ["shot_id", "purpose", "story_beat"]
-                    }
-                }
-            }
-        }
-
-        result = await provider.generate_json(prompt, response_schema)
-        try:
-            return CinematographyResult.model_validate(result)
-        except Exception as e:
-            raise ValueError(f"Failed to parse LLM cinematography shot plan: {e}")
+        db.commit()
+        return extraction

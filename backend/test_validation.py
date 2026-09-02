@@ -1,4 +1,4 @@
-from app.schemas.cinematography import ColorSchema, CameraSchema, CompositionSchema, LightingSchema
+from app.schemas.cinematography import ColorPlan as ColorSchema, CameraSchema, CompositionSchema, LightingSchema
 from pydantic import ValidationError
 import sys
 
