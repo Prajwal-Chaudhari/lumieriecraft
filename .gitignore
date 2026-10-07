@@ -49,3 +49,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnp.*
+
+# Local development/debug artifacts
+backend/bytez_docs.md
+backend/console.log
+backend/dom.html
+backend/openapi_dump.json
+backend/scratch/
+backend/test_api.py
+backend/test_gemini.py
+backend/test_script_doctor_direct.py
+backend/ui_test.py
