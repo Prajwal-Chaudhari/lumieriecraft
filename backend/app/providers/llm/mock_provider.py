@@ -22,59 +22,55 @@ class MockLLMProvider(LLMProvider):
                 "metadata": {}
             }
 
-        # Production Intelligence - Cinematography
-        if "scenes" in schema.get("properties", {}) and "visual_goal" in schema.get("properties", {}).get("scenes", {}).get("items", {}).get("properties", {}):
+        # Production Intelligence - Cinematography (Per Scene)
+        if "scene_id" in schema.get("properties", {}) and "visual_goal" in schema.get("properties", {}):
             return {
-                "scenes": [
+                "scene_id": "scene_1",
+                "visual_goal": "Establish isolation",
+                "overall_mood": "Lonely",
+                "color_plan": {
+                    "palette": [
+                        {"hex": "#0000FF", "role": "Key Light", "description": "Cold blue"}
+                    ],
+                    "temperature_kelvin": 6500,
+                    "contrast": 1.5,
+                    "saturation": 0.8,
+                    "mood": "Cold",
+                    "film_look": "Kodak Vision3",
+                    "lut": {
+                        "name": "SciFi Blue",
+                        "type": "Creative",
+                        "reason": "Enhance coldness"
+                    }
+                },
+                "shots": [
                     {
-                        "scene_id": "scene_1",
-                        "visual_goal": "Establish isolation",
-                        "overall_mood": "Lonely",
-                        "color_plan": {
-                            "palette": [
-                                {"hex": "#0000FF", "role": "Key Light", "description": "Cold blue"}
-                            ],
-                            "temperature_kelvin": 6500,
-                            "contrast": 1.5,
-                            "saturation": 0.8,
-                            "mood": "Cold",
-                            "film_look": "Kodak Vision3",
-                            "lut": {
-                                "name": "SciFi Blue",
-                                "type": "Creative",
-                                "reason": "Enhance coldness"
-                            }
+                        "shot_id": "scene_1_shot_1",
+                        "purpose": "Show isolation",
+                        "story_beat": "Establishes isolation",
+                        "shot_size": "Wide",
+                        "camera": {
+                            "angle": "High",
+                            "focal_length_mm": 24,
+                            "lens_type": "Spherical",
+                            "movement": "Slow push in"
                         },
-                        "shots": [
-                            {
-                                "shot_id": "scene_1_shot_1",
-                                "purpose": "Show isolation",
-                                "story_beat": "Establishes isolation",
-                                "shot_size": "Wide",
-                                "camera": {
-                                    "angle": "High",
-                                    "focal_length_mm": 24,
-                                    "lens_type": "Spherical",
-                                    "movement": "Slow push in"
-                                },
-                                "blocking": {
-                                    "subject_position": "Center",
-                                    "gaze_direction": "Down",
-                                    "character_interaction": "None"
-                                },
-                                "composition": {
-                                    "rule_of_thirds": True,
-                                    "symmetry": True
-                                },
-                                "lighting": {
-                                    "setup": "Top lit",
-                                    "direction": "Overhead",
-                                    "intensity": "Low"
-                                },
-                                "subject": "Astronaut at console",
-                                "emotion": "Lonely"
-                            }
-                        ]
+                        "blocking": {
+                            "subject_position": "Center",
+                            "gaze_direction": "Down",
+                            "character_interaction": "None"
+                        },
+                        "composition": {
+                            "rule_of_thirds": True,
+                            "symmetry": True
+                        },
+                        "lighting": {
+                            "setup": "Top lit",
+                            "direction": "Overhead",
+                            "intensity": "Low"
+                        },
+                        "subject": "Astronaut at console",
+                        "emotion": "Lonely"
                     }
                 ]
             }

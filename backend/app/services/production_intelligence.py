@@ -88,28 +88,10 @@ class ProductionIntelligenceService:
         if script.status != "approved":
             raise ValueError("Script must be approved before global bible extraction.")
 
-        provider = self.get_llm()
+        provider = self.get_llm(purpose="PRODUCTION_INTELLIGENCE")
         
-        script_text = ""
-        for scene_dict in script.scenes:
-            scene = Scene.model_validate(scene_dict)
-            script_text += f"\n\nSCENE {scene.scene_number}: {scene.heading}\n"
-            script_text += f"ID: {scene.id}\n"
-            script_text += f"Description: {scene.description}\n"
-            for action in scene.actions:
-                script_text += f"Action: {action.text}\n"
-            for dialogue in scene.dialogue:
-                script_text += f"{dialogue.character}: {dialogue.text}\n"
+        extraction = GlobalExtractionResult(characters=[], locations=[])
 
-        prompt = f"""You are a professional production breakdown agent.
-Analyze the following approved screenplay globally. Extract all significant characters and locations to form the Character Bible and World Bible.
-For each, clearly separate 'established_facts' (explicitly stated in the screenplay text) from 'inferred_facts' (your logical inferences/suggestions for production).
-DO NOT treat AI inference as established canon.
-Track 'source_scene_ids' as a list of strings for where they appear.
-
-Screenplay:
-{script_text}
-"""
         response_schema = {
             "type": "OBJECT",
             "properties": {
@@ -155,11 +137,69 @@ Screenplay:
             }
         }
         
-        result = await _generate_with_retry(provider, prompt, response_schema)
-        try:
-            extraction = GlobalExtractionResult.model_validate(result)
-        except Exception as e:
-            raise ValueError(f"Failed to parse LLM global extraction: {e}")
+        chunk_size = 20
+        for i in range(0, len(script.scenes), chunk_size):
+            chunk_scenes = script.scenes[i:i + chunk_size]
+            script_text = ""
+            for scene_dict in chunk_scenes:
+                scene = Scene.model_validate(scene_dict)
+                script_text += f"\n\nSCENE {scene.scene_number}: {scene.heading}\n"
+                script_text += f"ID: {scene.id}\n"
+                script_text += f"Location: {scene.location}\n"
+                script_text += f"Time of Day: {scene.time_of_day}\n"
+                script_text += f"Description: {scene.description}\n"
+                chars = ", ".join([c.name for c in scene.characters]) if scene.characters else "None explicit"
+                script_text += f"Characters in Scene: {chars}\n"
+
+            prompt = f"""You are a professional production breakdown agent.
+Analyze the following section of an approved screenplay. Extract all significant characters and locations to form the Character Bible and World Bible.
+For each, clearly separate 'established_facts' (explicitly stated in the screenplay text) from 'inferred_facts' (your logical inferences/suggestions for production).
+DO NOT treat AI inference as established canon. DO NOT fabricate characters or locations not present in this text.
+Strictly ensure continuity constraints are extracted and placed into 'continuity_notes' as a single string paragraph (NOT a list/array).
+Track 'source_scene_ids' as a list of strings for where they appear using the provided ID.
+
+Screenplay Section:
+{script_text}
+"""
+            
+            result = await _generate_with_retry(provider, prompt, response_schema)
+            try:
+                chunk_extraction = GlobalExtractionResult.model_validate(result)
+                
+                # Merge Characters
+                for char in chunk_extraction.characters:
+                    existing = next((c for c in extraction.characters if c.name.upper() == char.name.upper()), None)
+                    if existing:
+                        existing.established_facts = list(set(existing.established_facts + char.established_facts))
+                        existing.inferred_facts = list(set(existing.inferred_facts + char.inferred_facts))
+                        existing.source_scene_ids = list(set(existing.source_scene_ids + char.source_scene_ids))
+                        if not existing.description and char.description: existing.description = char.description
+                        if not existing.appearance and char.appearance: existing.appearance = char.appearance
+                        if not existing.personality and char.personality: existing.personality = char.personality
+                        if not existing.clothing and char.clothing: existing.clothing = char.clothing
+                        if not existing.hair and char.hair: existing.hair = char.hair
+                        if not existing.accessories and char.accessories: existing.accessories = char.accessories
+                        if not existing.continuity_notes and char.continuity_notes: existing.continuity_notes = char.continuity_notes
+                    else:
+                        extraction.characters.append(char)
+
+                # Merge Locations
+                for loc in chunk_extraction.locations:
+                    existing = next((l for l in extraction.locations if l.name.upper() == loc.name.upper()), None)
+                    if existing:
+                        existing.established_facts = list(set(existing.established_facts + loc.established_facts))
+                        existing.inferred_facts = list(set(existing.inferred_facts + loc.inferred_facts))
+                        existing.source_scene_ids = list(set(existing.source_scene_ids + loc.source_scene_ids))
+                        if not existing.description and loc.description: existing.description = loc.description
+                        if not existing.architecture and loc.architecture: existing.architecture = loc.architecture
+                        if not existing.lighting_characteristics and loc.lighting_characteristics: existing.lighting_characteristics = loc.lighting_characteristics
+                        if not existing.time_variants and loc.time_variants: existing.time_variants = loc.time_variants
+                        if not existing.recurring_props and loc.recurring_props: existing.recurring_props = loc.recurring_props
+                        if not existing.continuity_notes and loc.continuity_notes: existing.continuity_notes = loc.continuity_notes
+                    else:
+                        extraction.locations.append(loc)
+            except Exception as e:
+                raise ValueError(f"Failed to parse LLM global extraction for chunk: {e}")
 
         # Upsert Characters
         for char_data in extraction.characters:
@@ -211,7 +251,7 @@ Screenplay:
         if script.status != "approved":
             raise ValueError("Script must be approved before scene breakdown extraction.")
 
-        provider = self.get_llm()
+        provider = self.get_llm(purpose="PRODUCTION_INTELLIGENCE")
         
         scene_text = f"SCENE {scene.scene_number}: {scene.heading}\nDescription: {scene.description}\n"
         for action in scene.actions:
@@ -224,6 +264,9 @@ Analyze the following scene from the approved screenplay.
 DO NOT duplicate the actions, dialogue, or scene description. Provide derived production intelligence: 
 location context, time of day, story beat, emotional beat, narrative purpose, visual context, props, and continuity notes.
 Use the global context (Character & World Bibles) to ensure consistency.
+DO NOT fabricate characters, locations, props, or story events that are not supported by the scene text.
+Strictly ensure continuity constraints are extracted and placed into 'continuity_notes' as a single string paragraph (NOT a list/array).
+If something is not present, omit it rather than hallucinating.
 
 Global Context:
 {global_bibles.model_dump_json(indent=2)}

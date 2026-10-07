@@ -5,10 +5,17 @@ from google.genai import types
 from app.providers.llm.base import LLMProvider
 
 class GeminiLLMProvider(LLMProvider):
+    DEFAULT_MODEL = "gemini-3.5-flash-lite"
+    FALLBACK_MODELS = [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.7-flash",
+    ]
+
     def __init__(self):
         # We assume GEMINI_API_KEY is configured in the environment
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL)
         self.client = None
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
@@ -18,22 +25,24 @@ class GeminiLLMProvider(LLMProvider):
             raise Exception("Configuration Error: GEMINI_API_KEY environment variable is missing.")
 
         system_instruction = (
-            f"You are a master screenwriter. You MUST return ONLY valid JSON matching this JSON Schema:\n"
-            f"{json.dumps(schema)}\n"
+            f"You are a master screenwriter. You MUST return ONLY valid JSON that matches the requested schema.\n"
             f"Do not include ```json markdown blocks, just raw JSON."
         )
 
-        try:
-            import asyncio
-            import logging
-            
-            max_retries = 3
-            base_delay = 2.0
-            
+        import asyncio
+        import logging
+
+        models_to_try = [self.model] + [m for m in self.FALLBACK_MODELS if m != self.model]
+        last_error = None
+
+        for model in models_to_try:
+            max_retries = 2
+            base_delay = 1.5
+
             for attempt in range(max_retries):
                 try:
                     response = await self.client.aio.models.generate_content(
-                        model=self.model,
+                        model=model,
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             system_instruction=system_instruction,
@@ -44,26 +53,24 @@ class GeminiLLMProvider(LLMProvider):
                     
                     content = response.text
                     if not content:
-                        raise Exception("Gemini returned an empty response.")
+                        raise Exception(f"Gemini returned an empty response from {model}.")
                         
                     return json.loads(content)
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Failed to parse JSON from Gemini response: {str(e)}")
                 except Exception as e:
                     error_msg = str(e)
+                    last_error = error_msg
                     is_transient = any(code in error_msg for code in ["429", "500", "502", "503", "504"])
                     
                     if not is_transient or attempt == max_retries - 1:
-                        # Re-raise if it's not transient or we're out of retries
-                        raise e
+                        logging.warning(f"Gemini model {model} failed: {error_msg}. Trying fallback model...")
+                        break
                     
                     delay = base_delay * (2 ** attempt)
-                    logging.warning(f"Transient LLM error. Retrying in {delay}s (Attempt {attempt+1}/{max_retries})...")
+                    logging.warning(f"Transient error with {model}. Retrying in {delay}s...")
                     await asyncio.sleep(delay)
-                    
-        except json.JSONDecodeError as e:
-            raise Exception(f"Failed to parse JSON from Gemini response: {str(e)}")
-        except Exception as e:
-            # We catch other API errors and surface them cleanly
-            error_msg = str(e)
-            if self.api_key and self.api_key in error_msg:
-                error_msg = error_msg.replace(self.api_key, "***API_KEY_HIDDEN***")
-            raise Exception(f"Gemini API Error: {error_msg}")
+
+        if self.api_key and last_error and self.api_key in last_error:
+            last_error = last_error.replace(self.api_key, "***API_KEY_HIDDEN***")
+        raise Exception(f"Gemini API Error: {last_error}")

@@ -243,7 +243,12 @@ async def run_test():
                 print("\nPHASE 5D REAL PIXAZO ACCEPTANCE: NOT VERIFIED")
 
 if __name__ == "__main__":
-    if not os.getenv("GEMINI_API_KEY"):
+    provider = os.getenv("SCRIPT_WRITER_PROVIDER", "").lower()
+    if provider == "openrouter" and not os.getenv("OPENROUTER_API_KEY"):
+        print("Error: OPENROUTER_API_KEY must be set to run acceptance test.")
+    elif provider == "gemini" and not os.getenv("GEMINI_API_KEY"):
         print("Error: GEMINI_API_KEY must be set to run acceptance test.")
+    elif not provider:
+        print("Error: SCRIPT_WRITER_PROVIDER must be set (e.g. 'openrouter' or 'gemini').")
     else:
         asyncio.run(run_test())

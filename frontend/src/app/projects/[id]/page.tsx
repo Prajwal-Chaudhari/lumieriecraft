@@ -54,7 +54,7 @@ export default function ProjectDashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Script Studio Card */}
         <Link href={`/projects/${project.id}/script`} className="block group">
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-indigo-500 hover:shadow-lg transition-all h-full flex flex-col">
@@ -101,6 +101,23 @@ export default function ProjectDashboardPage() {
             <div className="mt-auto flex justify-end">
               <span className="text-indigo-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
                 Open Storyboard &rarr;
+              </span>
+            </div>
+          </div>
+        </Link>
+
+        {/* Production Intelligence Card */}
+        <Link href={`/projects/${project.id}/production`} className="block group">
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-indigo-500 hover:shadow-lg transition-all h-full flex flex-col">
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold text-gray-100 group-hover:text-indigo-400 transition-colors">Production Intelligence</h2>
+            </div>
+            <p className="text-gray-400 text-sm mb-6 flex-grow">
+              Extract character bibles, world locations, and scene breakdowns derived directly from your script.
+            </p>
+            <div className="mt-auto flex justify-end">
+              <span className="text-indigo-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                View Bibles &rarr;
               </span>
             </div>
           </div>

@@ -9,10 +9,11 @@ class OpenAILLMProvider(LLMProvider):
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     async def generate_json(self, prompt: str, schema: dict) -> dict:
+        normalized_schema = self.normalize_schema(schema)
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": f"You are a master screenwriter. You MUST return ONLY valid JSON matching this JSON Schema:\n{json.dumps(schema)}\nDo not include ```json markdown blocks, just raw JSON."},
+                {"role": "system", "content": f"You are a master screenwriter. You MUST return ONLY valid JSON matching this JSON Schema:\n{json.dumps(normalized_schema)}\nDo not include ```json markdown blocks, just raw JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}

@@ -71,9 +71,15 @@ import traceback
 async def global_exception_handler(request: Request, exc: Exception):
     # Print the traceback so it still shows up in the backend logs
     traceback.print_exc()
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal Server Error", "message": str(exc)},
+        headers=headers
     )
 
 if __name__ == "__main__":

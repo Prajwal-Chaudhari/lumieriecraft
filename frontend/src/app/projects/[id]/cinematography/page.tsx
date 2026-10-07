@@ -34,12 +34,18 @@ export default function CinematographyPage() {
   const handlePropose = async () => {
     setProposing(true);
     try {
-      await fetch(`http://localhost:8000/api/projects/${projectId}/cinematography/propose`, {
+      const res = await fetch(`http://localhost:8000/api/projects/${projectId}/cinematography/propose`, {
         method: "POST"
       });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Failed to generate proposal: ${errorData.detail || res.statusText}`);
+        return;
+      }
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Network error: ${err.message}`);
     } finally {
       setProposing(false);
     }

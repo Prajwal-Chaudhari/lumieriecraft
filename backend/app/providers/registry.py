@@ -7,27 +7,11 @@ class ProviderRegistry:
         self._providers: dict[str, ImageGenerationProvider] = {}
         self.register("mock", MockImageGenerationProvider())
         
-        # Attempt to register HuggingFace if key exists
-        if os.getenv("HUGGINGFACE_API_TOKEN"):
-            try:
-                from app.providers.huggingface_provider import HuggingFaceProvider
-                self.register("huggingface", HuggingFaceProvider())
-            except Exception:
-                pass
-
         # Attempt to register Pixazo if key exists
         if os.getenv("PIXAZO_API_KEY"):
             try:
                 from app.providers.pixazo_provider import PixazoProvider
                 self.register("pixazo", PixazoProvider())
-            except Exception:
-                pass
-
-        # Attempt to register Fal if key exists
-        if os.getenv("FAL_KEY"):
-            try:
-                from app.providers.fal_provider import FalProvider
-                self.register("fal", FalProvider())
             except Exception:
                 pass
 

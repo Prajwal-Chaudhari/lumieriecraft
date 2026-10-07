@@ -47,7 +47,7 @@ async def propose_cinematography(project_id: str, session: Session = Depends(get
         raise HTTPException(status_code=404, detail="No script found to analyze")
 
     try:
-        plan_data = await cinematographer_service.propose_cinematography(project_id, script)
+        plan_data = await cinematographer_service.propose_cinematography(project_id, script, session)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
