@@ -2,7 +2,7 @@ from typing import Optional, List
 from sqlmodel import SQLModel, Field, Column, JSON
 from pydantic import BaseModel
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Deep nested schemas for structured screenplay
 class DialogueLine(BaseModel):
@@ -38,8 +38,8 @@ class ScriptBase(SQLModel):
 class Script(ScriptBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     scenes: List[dict] = Field(default=[], sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ScriptCreate(ScriptBase):
     pass
@@ -52,7 +52,7 @@ class ScriptProposalBase(SQLModel):
 class ScriptProposal(ScriptProposalBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     proposed_script: dict = Field(default={}, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ScriptProposalCreate(ScriptProposalBase):
     proposed_script: dict

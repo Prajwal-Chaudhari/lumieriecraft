@@ -155,7 +155,7 @@ class StoryboardAgentService:
 
         return context
 
-    async def generate_storyboard(self, shot: ShotBlueprint, scene: Dict[str, Any], characters: List[CharacterAsset], project: Project, script_version: int) -> StoryboardFrame:
+    async def generate_storyboard(self, shot: ShotBlueprint, scene: Dict[str, Any], characters: List[CharacterAsset], project: Project, script_version: int, script_id: str) -> StoryboardFrame:
         # Build Context
         context = self.create_generation_context(shot, scene, characters)
         
@@ -175,7 +175,7 @@ class StoryboardAgentService:
             shot_id=shot.id,
             prompt=context.final_prompt,
             negative_prompt=context.negative_prompt,
-            reference_image_urls=reference_images,
+            reference_images=reference_images,
             mode="storyboard_sketch"
         )
         
@@ -186,7 +186,7 @@ class StoryboardAgentService:
         frame = StoryboardFrame(
             project_id=project.id,
             production_plan_id=shot.production_plan_id,
-            script_id=project.id, # Using project.id for script_id based on previous comment
+            script_id=script_id,
             script_version=script_version,
             scene_id=shot.scene_id,
             shot_id=shot.id,

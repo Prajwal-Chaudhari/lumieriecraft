@@ -50,3 +50,17 @@ def get_production_intelligence(project_id: str, script_id: str, db: Session = D
         world_locations=worlds,
         scene_breakdowns=breakdowns
     )
+
+@router.post("/{project_id}/production/characters/{character_id}/recommend-costume", response_model=CharacterBibleResponse)
+async def recommend_costume(project_id: str, character_id: str, db: Session = Depends(get_session)):
+    char = db.exec(select(CharacterBible).where(CharacterBible.id == character_id, CharacterBible.project_id == project_id)).first()
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+        
+    script = db.exec(select(Script).where(Script.project_id == project_id, Script.status == "approved")).first()
+    if not script:
+        raise HTTPException(status_code=404, detail="Approved script not found")
+        
+    await service.generate_costume_recommendation(db=db, script=script, character=char)
+    
+    return char

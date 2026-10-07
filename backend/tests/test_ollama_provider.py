@@ -13,17 +13,19 @@ def mock_env():
 
 @pytest.mark.asyncio
 async def test_ollama_initialization(mock_env):
-    provider = OllamaLLMProvider()
-    assert provider.model == "qwen3:8b"
-    assert provider.base_url == "http://localhost:11434/v1"
-    assert str(provider.client.base_url) == "http://localhost:11434/v1/"
+    with patch("app.providers.llm.ollama_provider.AsyncOpenAI") as MockClient:
+        provider = OllamaLLMProvider()
+        assert provider.model == "qwen3:8b"
+        assert provider.base_url == "http://localhost:11434/v1"
+        assert provider.client == MockClient.return_value
 
 @pytest.mark.asyncio
 async def test_ollama_generate_json_valid(mock_env):
     with patch("app.providers.llm.ollama_provider.AsyncOpenAI") as MockClient:
-        mock_response = AsyncMock()
+        from unittest.mock import MagicMock
+        mock_response = MagicMock()
         mock_response.choices = [
-            AsyncMock(message=AsyncMock(content='{"scenes": [{"heading": "INT. ROOM - DAY", "description": "A sunny room."}]}'))
+            MagicMock(message=MagicMock(content='{"scenes": [{"heading": "INT. ROOM - DAY", "description": "A sunny room."}]}'))
         ]
         
         mock_client_instance = MockClient.return_value
@@ -56,9 +58,10 @@ async def test_ollama_generate_json_valid(mock_env):
 @pytest.mark.asyncio
 async def test_ollama_generate_json_malformed(mock_env):
     with patch("app.providers.llm.ollama_provider.AsyncOpenAI") as MockClient:
-        mock_response = AsyncMock()
+        from unittest.mock import MagicMock
+        mock_response = MagicMock()
         mock_response.choices = [
-            AsyncMock(message=AsyncMock(content='not a json string'))
+            MagicMock(message=MagicMock(content='not a json string'))
         ]
         
         mock_client_instance = MockClient.return_value
@@ -88,13 +91,14 @@ async def test_ollama_unavailable_error(mock_env):
 @pytest.mark.asyncio
 async def test_ollama_different_inputs(mock_env):
     with patch("app.providers.llm.ollama_provider.AsyncOpenAI") as MockClient:
+        from unittest.mock import MagicMock
         mock_client_instance = MockClient.return_value
         
         async def mock_create(**kwargs):
             prompt = kwargs["messages"][1]["content"]
             response_content = '{"title": "Scene A"}' if "Input A" in prompt else '{"title": "Scene B"}'
-            mock_response = AsyncMock()
-            mock_response.choices = [AsyncMock(message=AsyncMock(content=response_content))]
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock(message=MagicMock(content=response_content))]
             return mock_response
             
         mock_client_instance.chat.completions.create = AsyncMock(side_effect=mock_create)

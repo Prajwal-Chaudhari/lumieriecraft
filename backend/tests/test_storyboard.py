@@ -54,4 +54,3 @@ def test_prompt_compilation():
     assert "ACTION / STORY BEAT:" in prompt
     assert "Establish location" in prompt
 
-from tests.conftest import get_session_override

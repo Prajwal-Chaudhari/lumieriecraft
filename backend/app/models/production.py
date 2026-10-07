@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field, Column, JSON
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Schemas removed from direct import since fields are now JSON dicts
 class ProductionStatus:
@@ -23,8 +23,8 @@ class ProductionPlanBase(SQLModel):
 
 class ProductionPlan(ProductionPlanBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = Field(default=1)
 
 class CinematographyProposal(SQLModel, table=True):
@@ -34,7 +34,7 @@ class CinematographyProposal(SQLModel, table=True):
     script_version: int
     proposed_plan: dict = Field(default_factory=dict, sa_column=Column(JSON)) # CinematographyPlanSchema
     status: str = Field(default="PENDING")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ShotBlueprintBase(SQLModel):
     production_plan_id: str = Field(foreign_key="productionplan.id")
@@ -75,7 +75,7 @@ class StoryboardFrameBase(SQLModel):
 
 class StoryboardFrame(StoryboardFrameBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CharacterBibleBase(SQLModel):
     project_id: str = Field(foreign_key="project.id")
@@ -91,11 +91,12 @@ class CharacterBibleBase(SQLModel):
     continuity_notes: Optional[str] = None
     source_scene_ids: List[str] = Field(default_factory=list, sa_column=Column(JSON))
     reference_images: List[str] = Field(default_factory=list, sa_column=Column(JSON))
+    costume_recommendation: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
 class CharacterBible(CharacterBibleBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class WorldBibleBase(SQLModel):
     project_id: str = Field(foreign_key="project.id")
@@ -112,13 +113,14 @@ class WorldBibleBase(SQLModel):
 
 class WorldBible(WorldBibleBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class SceneBreakdownBase(SQLModel):
     project_id: str = Field(foreign_key="project.id")
     script_id: str = Field(foreign_key="script.id")
     scene_id: str
+    summary: Optional[str] = None
     location: Optional[str] = None
     time_of_day: Optional[str] = None
     story_beat: Optional[str] = None
@@ -132,5 +134,5 @@ class SceneBreakdownBase(SQLModel):
 
 class SceneBreakdown(SceneBreakdownBase, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

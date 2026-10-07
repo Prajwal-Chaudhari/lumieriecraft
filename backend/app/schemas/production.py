@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -17,11 +17,11 @@ class CharacterBibleResponse(BaseModel):
     continuity_notes: Optional[str] = None
     source_scene_ids: List[str] = []
     reference_images: List[str] = []
+    costume_recommendation: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WorldBibleResponse(BaseModel):
     id: str
@@ -39,14 +39,14 @@ class WorldBibleResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class SceneBreakdownResponse(BaseModel):
     id: str
     project_id: str
     script_id: str
     scene_id: str
+    summary: Optional[str] = None
     location: Optional[str] = None
     time_of_day: Optional[str] = None
     story_beat: Optional[str] = None
@@ -59,8 +59,7 @@ class SceneBreakdownResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ProductionAnalysisResponse(BaseModel):
     characters: List[CharacterBibleResponse]

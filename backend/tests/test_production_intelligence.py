@@ -20,7 +20,7 @@ def prod_service_fixture():
     # Mock the LLM provider
     mock_provider = MagicMock()
     mock_provider.generate_json = AsyncMock()
-    service.get_llm = lambda: mock_provider
+    service.get_llm = lambda **kwargs: mock_provider
     return service
 
 @pytest.fixture(name="approved_script")
@@ -131,3 +131,38 @@ async def test_analyze_scene_for_production(session, prod_service, approved_scri
     breakdowns = session.exec(select(SceneBreakdown).where(SceneBreakdown.project_id == approved_script.project_id)).all()
     assert len(breakdowns) == 1
     assert breakdowns[0].time_of_day == "DAWN"
+
+@pytest.mark.asyncio
+async def test_generate_costume_recommendation(session, prod_service, approved_script):
+    # Setup mock LLM response
+    prod_service.get_llm().generate_json.return_value = {
+        "outfit_description": "A dark trench coat with a scarf.",
+        "accessories": ["Vintage watch"],
+        "color_palette": ["Dark blue", "Gray"],
+        "reasoning": "Fits the dark tone of the scene."
+    }
+
+    # Setup character bible in DB
+    char_bible = CharacterBible(
+        project_id=approved_script.project_id,
+        name="MIRA",
+        description="A woman waiting at a station.",
+        established_facts=["Has a red suitcase"],
+        inferred_facts=[],
+        source_scene_ids=[]
+    )
+    session.add(char_bible)
+    session.commit()
+    session.refresh(char_bible)
+    
+    # Generate recommendation
+    result = await prod_service.generate_costume_recommendation(session, approved_script, char_bible)
+    
+    # Assert return object
+    assert result["outfit_description"] == "A dark trench coat with a scarf."
+    assert "Vintage watch" in result["accessories"]
+    
+    # Assert DB update
+    session.refresh(char_bible)
+    assert char_bible.costume_recommendation is not None
+    assert char_bible.costume_recommendation["outfit_description"] == "A dark trench coat with a scarf."

@@ -27,7 +27,7 @@ def clean_env():
                 del os.environ[k]
 
 def test_missing_provider_raises_error(clean_env):
-    with pytest.raises(ValueError, match="SCRIPT_WRITER_PROVIDER environment variable is not set"):
+    with pytest.raises(ValueError, match="Configuration Error: SCRIPT_WRITER_PROVIDER or LLM_PROVIDER environment variable is not set."):
         get_llm_provider()
 
 def test_explicit_mock_resolves(clean_env):

@@ -1,13 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from typing import Optional
 from pydantic import BaseModel
-from sqlmodel import Session, select, desc
+from sqlmodel import Session, select, desc, delete
 from app.db import get_session
 from app.models.project import Project, ProjectCreate, CharacterAsset
 
 
 from app.models.script import Script, ScriptCreate, ScriptProposal
 from app.services.script_doctor import ScriptDoctorService
+from app.models.production import (
+    CharacterBible, WorldBible, SceneBreakdown, 
+    CinematographyProposal, ProductionPlan, 
+    ShotBlueprint, StoryboardFrame
+)
 
 router = APIRouter(tags=["projects"])
 
@@ -15,6 +20,50 @@ router = APIRouter(tags=["projects"])
 def get_project_characters(project_id: str, db: Session = Depends(get_session)):
     characters = db.exec(select(CharacterAsset).where(CharacterAsset.project_id == project_id)).all()
     return characters
+
+@router.get("/projects/{project_id}/characters/dialogue")
+def get_character_dialogue(project_id: str, session: Session = Depends(get_session)):
+    script = session.exec(select(Script).where(Script.project_id == project_id, Script.status == "approved").order_by(desc(Script.version))).first()
+    if not script:
+        script = session.exec(select(Script).where(Script.project_id == project_id).order_by(desc(Script.version))).first()
+    
+    if not script:
+        return {}
+
+    dialogues = {}
+    import re
+    for scene_dict in script.scenes:
+        from app.models.script import Scene
+        scene = Scene.model_validate(scene_dict)
+        for d in scene.dialogue:
+            # The raw character string with delivery annotations (e.g. "JOHN (O.S.)")
+            raw_char = d.character.upper().strip()
+            
+            # Normalize to find the core character name by removing all trailing (PARENTHETICALS)
+            char_name = raw_char
+            while True:
+                new_name = re.sub(r'\s*\([^)]*\)\s*$', '', char_name)
+                if new_name == char_name:
+                    break
+                char_name = new_name
+            char_name = char_name.strip()
+            
+            if not char_name: # Fallback just in case
+                char_name = raw_char
+
+            if char_name not in dialogues:
+                dialogues[char_name] = []
+            
+            dialogues[char_name].append({
+                "scene_id": scene.id,
+                "scene_number": scene.scene_number,
+                "scene_heading": scene.heading,
+                "text": d.text,
+                "parenthetical": d.parenthetical,
+                "original_character": raw_char
+            })
+            
+    return dialogues
 
 @router.post("/projects", response_model=Project)
 def create_project(project: ProjectCreate, session: Session = Depends(get_session)):
@@ -173,3 +222,66 @@ async def propose_scene_fix(
     session.commit()
     session.refresh(proposal)
     return proposal
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str, session: Session = Depends(get_session)):
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    try:
+        # 1. StoryboardFrame
+        session.exec(delete(StoryboardFrame).where(StoryboardFrame.project_id == project_id))
+        
+        # 2. ShotBlueprint (needs production_plan_ids)
+        plan_ids = session.exec(select(ProductionPlan.id).where(ProductionPlan.project_id == project_id)).all()
+        if plan_ids:
+            # For SQLModel `in_` requires a list. Use `col.in_(...)`
+            session.exec(delete(ShotBlueprint).where(ShotBlueprint.production_plan_id.in_(plan_ids)))
+            
+        # 3. ProductionPlan
+        session.exec(delete(ProductionPlan).where(ProductionPlan.project_id == project_id))
+        
+        # 4. CinematographyProposal
+        session.exec(delete(CinematographyProposal).where(CinematographyProposal.project_id == project_id))
+        
+        # 5. SceneBreakdown
+        session.exec(delete(SceneBreakdown).where(SceneBreakdown.project_id == project_id))
+        
+        # 6. WorldBible
+        session.exec(delete(WorldBible).where(WorldBible.project_id == project_id))
+        
+        # 7. CharacterBible
+        session.exec(delete(CharacterBible).where(CharacterBible.project_id == project_id))
+        
+        # 8. CharacterAsset
+        session.exec(delete(CharacterAsset).where(CharacterAsset.project_id == project_id))
+        
+        # 9. ScriptProposal
+        session.exec(delete(ScriptProposal).where(ScriptProposal.project_id == project_id))
+        
+        # 10. Script
+        session.exec(delete(Script).where(Script.project_id == project_id))
+        
+        # 11. Project
+        session.delete(project)
+        
+        session.commit()
+        return {"success": True, "message": "Project deleted successfully"}
+        
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")
+
+@router.get("/projects/{project_id}/budget")
+def get_project_budget(project_id: str, session: Session = Depends(get_session)):
+    from app.services.budget import BudgetService
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    budget_service = BudgetService()
+    try:
+        return budget_service.calculate_budget(session, project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to calculate budget: {str(e)}")

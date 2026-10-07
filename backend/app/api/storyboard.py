@@ -39,7 +39,8 @@ async def _generate_storyboard_background(shot_id: str, script_version: int, db:
             scene=scene,
             characters=characters,
             project=project,
-            script_version=script_version
+            script_version=script_version,
+            script_id=script.id
         )
         
         db.add(frame)

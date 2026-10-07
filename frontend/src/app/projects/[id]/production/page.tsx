@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Project, Script, ProductionAnalysisResponse, CharacterBibleResponse, WorldBibleResponse, SceneBreakdownResponse,
-  fetchProject, fetchScript, getProductionBibles, extractProductionBibles
+  fetchProject, fetchScript, getProductionBibles, extractProductionBibles, fetchCharacterDialogues, CharacterDialoguesResponse,
+  generateCostumeRecommendation, fetchProjectBudget, BudgetResponse
 } from "@/lib/api";
 
 export default function ProductionIntelligencePage() {
@@ -15,24 +16,32 @@ export default function ProductionIntelligencePage() {
   const [project, setProject] = useState<Project | null>(null);
   const [script, setScript] = useState<Script | null>(null);
   const [bibles, setBibles] = useState<ProductionAnalysisResponse | null>(null);
+  const [dialogues, setDialogues] = useState<CharacterDialoguesResponse | null>(null);
+  const [budget, setBudget] = useState<BudgetResponse | null>(null);
   
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"characters" | "worlds" | "scenes">("characters");
+  const [activeTab, setActiveTab] = useState<"characters" | "worlds" | "scenes" | "dialogues" | "budget">("characters");
+  const [selectedCharDialogue, setSelectedCharDialogue] = useState<string | null>(null);
+  const [generatingCostume, setGeneratingCostume] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!id) return;
     
     const loadData = async () => {
       try {
-        const [pData, sData] = await Promise.all([
+        const [pData, sData, dData, budgetData] = await Promise.all([
           fetchProject(id),
-          fetchScript(id).catch(() => null)
+          fetchScript(id).catch(() => null),
+          fetchCharacterDialogues(id).catch(() => (null)),
+          fetchProjectBudget(id).catch(() => (null))
         ]);
         setProject(pData);
         setScript(sData);
+        setDialogues(dData);
+        setBudget(budgetData);
         
         if (sData?.id) {
           const bData = await getProductionBibles(id, sData.id).catch(() => null);
@@ -59,6 +68,24 @@ export default function ProductionIntelligencePage() {
       setError(err.message || "Failed to extract production bibles");
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const handleGenerateCostume = async (characterId: string) => {
+    if (!project?.id) return;
+    setGeneratingCostume(prev => ({ ...prev, [characterId]: true }));
+    setError(null);
+    try {
+      const updatedChar = await generateCostumeRecommendation(project.id, characterId);
+      setBibles(prev => {
+        if (!prev) return prev;
+        const newChars = prev.characters.map(c => c.id === characterId ? updatedChar : c);
+        return { ...prev, characters: newChars };
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to generate costume recommendation");
+    } finally {
+      setGeneratingCostume(prev => ({ ...prev, [characterId]: false }));
     }
   };
 
@@ -156,6 +183,22 @@ export default function ProductionIntelligencePage() {
                 >
                   Scene Breakdowns ({bibles.scene_breakdowns.length})
                 </button>
+                <button
+                  onClick={() => { setActiveTab("dialogues"); if (dialogues && !selectedCharDialogue) { setSelectedCharDialogue(Object.keys(dialogues)[0] || null); } }}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "dialogues" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
+                  }`}
+                >
+                  Dialogues ({dialogues ? Object.keys(dialogues).length : 0})
+                </button>
+                <button
+                  onClick={() => setActiveTab("budget")}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === "budget" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
+                  }`}
+                >
+                  Estimated Budget
+                </button>
               </div>
 
               <div className="py-4">
@@ -187,6 +230,94 @@ export default function ProductionIntelligencePage() {
                               </ul>
                             </div>
                           )}
+
+                          <div className="border-t border-gray-800 pt-4 mt-4">
+                            <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Established Costume</h4>
+                            <div className="text-gray-300 text-sm space-y-1">
+                              {char.clothing ? (
+                                <p>{char.clothing}</p>
+                              ) : (
+                                <p className="text-gray-500 italic">Not specified in screenplay</p>
+                              )}
+                              {char.accessories && <p><span className="text-gray-500">Accessories:</span> {char.accessories}</p>}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-2">Source: Screenplay</div>
+                          </div>
+
+                          <div className="border-t border-gray-800 pt-4 mt-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-xs uppercase tracking-wider text-indigo-400">Costume Recommendation</h4>
+                              <button 
+                                onClick={() => handleGenerateCostume(char.id)}
+                                disabled={generatingCostume[char.id]}
+                                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-xs px-3 py-1 rounded border border-gray-700"
+                              >
+                                {generatingCostume[char.id] ? "Generating..." : "Generate Recommendation"}
+                              </button>
+                            </div>
+                            
+                            {char.costume_recommendation ? (
+                              <div className="space-y-3 text-gray-300 bg-gray-950/50 p-3 rounded border border-gray-800">
+                                <div className="text-xs text-indigo-500/70 mb-2">AI-generated suggestion</div>
+                                
+                                {char.costume_recommendation.recommended_costume && (
+                                  <div>
+                                    <div className="text-gray-500 text-xs mb-1">Primary</div>
+                                    <ul className="list-disc pl-4 space-y-1">
+                                      {char.costume_recommendation.recommended_costume.top && <li>{char.costume_recommendation.recommended_costume.top}</li>}
+                                      {char.costume_recommendation.recommended_costume.bottom && <li>{char.costume_recommendation.recommended_costume.bottom}</li>}
+                                      {char.costume_recommendation.recommended_costume.outerwear && <li>{char.costume_recommendation.recommended_costume.outerwear}</li>}
+                                      {char.costume_recommendation.recommended_costume.footwear && <li>{char.costume_recommendation.recommended_costume.footwear}</li>}
+                                    </ul>
+                                  </div>
+                                )}
+                                
+                                {char.costume_recommendation.recommended_costume?.accessories?.length > 0 && (
+                                  <div>
+                                    <div className="text-gray-500 text-xs mb-1">Accessories</div>
+                                    <p>{char.costume_recommendation.recommended_costume.accessories.join(", ")}</p>
+                                  </div>
+                                )}
+
+                                {char.costume_recommendation.color_palette?.length > 0 && (
+                                  <div>
+                                    <div className="text-gray-500 text-xs mb-1">Color Palette</div>
+                                    <p>{char.costume_recommendation.color_palette.join(", ")}</p>
+                                  </div>
+                                )}
+
+                                {char.costume_recommendation.styling_notes && (
+                                  <div>
+                                    <div className="text-gray-500 text-xs mb-1">Styling Notes</div>
+                                    <p className="italic text-gray-400">{char.costume_recommendation.styling_notes}</p>
+                                  </div>
+                                )}
+                                
+                                {char.costume_recommendation.continuity_notes && (
+                                  <div>
+                                    <div className="text-gray-500 text-xs mb-1">Continuity</div>
+                                    <p className="text-gray-400">{char.costume_recommendation.continuity_notes}</p>
+                                  </div>
+                                )}
+
+                                {char.costume_recommendation.scene_variations?.length > 0 && (
+                                  <div className="mt-3 border-t border-gray-800 pt-3">
+                                    <div className="text-gray-500 text-xs mb-2">Scene Variations</div>
+                                    <div className="space-y-2">
+                                      {char.costume_recommendation.scene_variations.map((v: any, idx: number) => (
+                                        <div key={idx} className="bg-gray-900 p-2 rounded text-xs border border-gray-800">
+                                          <div className="text-indigo-400 mb-1">{v.scene_heading}</div>
+                                          <div className="text-gray-300">{v.costume_change}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-gray-500 text-xs italic">No recommendation generated yet.</div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -242,6 +373,12 @@ export default function ProductionIntelligencePage() {
                         </div>
                         
                         <div className="md:w-2/3 space-y-4 text-sm">
+                          {scene.summary && (
+                            <div>
+                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Scene Summary</h4>
+                              <p className="text-gray-300 text-base mb-2">{scene.summary}</p>
+                            </div>
+                          )}
                           {scene.narrative_purpose && (
                             <div>
                               <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Narrative Purpose</h4>
@@ -267,6 +404,123 @@ export default function ProductionIntelligencePage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {activeTab === "dialogues" && dialogues && (
+                  <div className="flex flex-col md:flex-row gap-6">
+                    <div className="md:w-1/4">
+                      <h3 className="text-lg font-bold text-gray-100 mb-4">Characters</h3>
+                      <div className="space-y-1">
+                        {Object.keys(dialogues).map((charName) => (
+                          <button
+                            key={charName}
+                            onClick={() => setSelectedCharDialogue(charName)}
+                            className={`w-full text-left px-4 py-2 rounded-md transition-colors ${
+                              selectedCharDialogue === charName
+                                ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
+                                : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+                            }`}
+                          >
+                            {charName} <span className="text-gray-600 text-xs ml-2">({dialogues[charName].length})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="md:w-3/4">
+                      {selectedCharDialogue && dialogues[selectedCharDialogue] ? (
+                        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
+                          <h3 className="text-xl font-bold text-gray-100 uppercase mb-6 border-b border-gray-800 pb-4">
+                            {selectedCharDialogue}'s Dialogue
+                          </h3>
+                          <div className="space-y-8">
+                            {dialogues[selectedCharDialogue].map((line, idx) => (
+                              <div key={idx} className="relative pl-4 border-l-2 border-gray-700">
+                                <div className="text-xs text-indigo-400 mb-1 uppercase tracking-wider">
+                                  Scene {line.scene_number}: {line.scene_heading}
+                                </div>
+                                <div className="font-bold text-gray-300 mb-1">
+                                  {line.original_character || selectedCharDialogue}
+                                </div>
+                                {line.parenthetical && (
+                                  <div className="text-gray-500 italic text-sm mb-1">
+                                    ({line.parenthetical})
+                                  </div>
+                                )}
+                                <p className="text-gray-300 text-lg leading-relaxed font-serif">
+                                  {line.text}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-64 text-gray-500">
+                          Select a character to view their dialogue lines.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "budget" && budget && (
+                  <div className="space-y-8">
+                    <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
+                      <h3 className="text-xl font-bold text-gray-100 uppercase mb-4">Overall Estimated Budget</h3>
+                      <div className="text-4xl font-bold text-indigo-400 mb-6">
+                        {budget.currency} {budget.total.toLocaleString()}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {Object.entries(budget.category_totals).map(([cat, amount]) => (
+                          <div key={cat} className="bg-gray-950 p-4 rounded border border-gray-800">
+                            <div className="text-xs uppercase text-gray-500 tracking-wider mb-1">{cat}</div>
+                            <div className="text-lg text-gray-200 font-medium">{budget.currency} {amount.toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-8 border-t border-gray-800 pt-6">
+                        <h4 className="text-sm uppercase tracking-wider text-gray-500 mb-3">Calculation Basis (Active Rates)</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs text-gray-400">
+                          {Object.entries(budget.rates).map(([rateKey, rateValue]) => (
+                            <div key={rateKey}>
+                              <span className="text-gray-500">{rateKey.replace(/_/g, ' ')}:</span> 
+                              <span className="ml-2 text-gray-300 font-medium">
+                                {rateValue > 10 ? `${budget.currency} ${rateValue}` : `${rateValue}x multiplier`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-bold text-gray-100 uppercase mb-4">Scene-by-Scene Breakdown</h3>
+                      {budget.scenes.map((scene) => (
+                        <div key={scene.scene_id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
+                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-4 border-b border-gray-800">
+                            <div>
+                              <div className="text-indigo-400 font-medium text-sm mb-1">Scene {scene.scene_number}</div>
+                              <h4 className="text-lg font-bold text-gray-200">{scene.heading}</h4>
+                            </div>
+                            <div className="text-xl font-bold text-indigo-400 mt-2 md:mt-0">
+                              {budget.currency} {scene.total.toLocaleString()}
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 gap-x-2 text-sm">
+                            {Object.entries(scene.breakdown).map(([cat, amount]) => (
+                              <div key={cat} className="flex justify-between items-center pr-4">
+                                <span className="text-gray-500 capitalize">{cat}:</span>
+                                <span className="text-gray-300 font-medium">{amount.toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

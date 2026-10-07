@@ -8,6 +8,8 @@ def get_llm_provider(purpose: str = "SCRIPT_WRITER"):
 
     provider_name = os.getenv(f"{purpose.upper()}_PROVIDER") or os.getenv("LLM_PROVIDER")
     
+    print(f"DEBUG: get_llm_provider called with purpose={purpose}, resolved provider_name={provider_name}, from SCRIPT_WRITER={os.getenv('SCRIPT_WRITER_PROVIDER')}, CINE={os.getenv('CINEMATOGRAPHY_PROVIDER')}, LLM={os.getenv('LLM_PROVIDER')}")
+
     if not provider_name:
         raise ValueError(f"Configuration Error: {purpose.upper()}_PROVIDER or LLM_PROVIDER environment variable is not set.")
         

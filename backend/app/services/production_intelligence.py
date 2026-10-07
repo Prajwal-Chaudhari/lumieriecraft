@@ -41,6 +41,7 @@ class GlobalExtractionResult(BaseModel):
     locations: List[WorldExtraction] = Field(default_factory=list)
 
 class SceneBreakdownExtraction(BaseModel):
+    summary: Optional[str] = None
     location: Optional[str] = None
     time_of_day: Optional[str] = None
     story_beat: Optional[str] = None
@@ -262,7 +263,7 @@ Screenplay Section:
         prompt = f"""You are a professional production breakdown agent.
 Analyze the following scene from the approved screenplay. 
 DO NOT duplicate the actions, dialogue, or scene description. Provide derived production intelligence: 
-location context, time of day, story beat, emotional beat, narrative purpose, visual context, props, and continuity notes.
+summary of the scene, location context, time of day, story beat, emotional beat, narrative purpose, visual context, props, and continuity notes.
 Use the global context (Character & World Bibles) to ensure consistency.
 DO NOT fabricate characters, locations, props, or story events that are not supported by the scene text.
 Strictly ensure continuity constraints are extracted and placed into 'continuity_notes' as a single string paragraph (NOT a list/array).
@@ -277,6 +278,7 @@ Scene to Analyze:
         response_schema = {
             "type": "OBJECT",
             "properties": {
+                "summary": {"type": "STRING", "description": "A concise summary of the scene.", "nullable": True},
                 "location": {"type": "STRING", "nullable": True},
                 "time_of_day": {"type": "STRING", "nullable": True},
                 "story_beat": {"type": "STRING", "nullable": True},
@@ -319,3 +321,86 @@ Scene to Analyze:
 
         db.commit()
         return extraction
+
+    async def generate_costume_recommendation(self, db: Session, script: Script, character: CharacterBible) -> dict:
+        provider = self.get_llm(purpose="PRODUCTION_INTELLIGENCE")
+        
+        scene_appearances = []
+        for scene_dict in script.scenes:
+            scene = Scene.model_validate(scene_dict)
+            
+            # Check if character is in the scene explicitly by character list or dialogue
+            in_scene = False
+            if scene.characters and any(c.name.upper() == character.name.upper() for c in scene.characters):
+                in_scene = True
+            elif scene.dialogue and any(d.character.upper() == character.name.upper() for d in scene.dialogue):
+                in_scene = True
+                
+            if in_scene:
+                breakdown = db.exec(select(SceneBreakdown).where(SceneBreakdown.scene_id == scene.id)).first()
+                scene_info = {
+                    "scene_id": scene.id,
+                    "scene_number": scene.scene_number,
+                    "heading": scene.heading,
+                    "summary": breakdown.summary if breakdown else scene.description
+                }
+                scene_appearances.append(scene_info)
+
+        prompt = f"""You are an expert film costume designer.
+Provide a costume recommendation for the character '{character.name}'.
+
+ESTABLISHED CHARACTER FACTS:
+Description: {character.description or 'None'}
+Appearance: {character.appearance or 'None'}
+Personality: {character.personality or 'None'}
+Established Clothing (From Screenplay): {character.clothing or 'None'}
+Accessories: {character.accessories or 'None'}
+
+The character appears in {len(scene_appearances)} scenes.
+Scenes Context: {json.dumps(scene_appearances, indent=2)}
+
+Generate a detailed costume recommendation.
+IMPORTANT CONTINUITY RULE: Base your recommendation on the established clothing if provided. Do NOT overwrite established facts.
+Provide variations for specific scenes ONLY if the story/summary implies a necessary costume change (e.g., getting dirty, changing for an event).
+"""
+
+        response_schema = {
+            "type": "OBJECT",
+            "properties": {
+                "recommended_costume": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "top": {"type": "STRING", "nullable": True},
+                        "bottom": {"type": "STRING", "nullable": True},
+                        "outerwear": {"type": "STRING", "nullable": True},
+                        "footwear": {"type": "STRING", "nullable": True},
+                        "accessories": {"type": "ARRAY", "items": {"type": "STRING"}}
+                    }
+                },
+                "color_palette": {"type": "ARRAY", "items": {"type": "STRING"}},
+                "styling_notes": {"type": "STRING"},
+                "continuity_notes": {"type": "STRING"},
+                "scene_variations": {
+                    "type": "ARRAY",
+                    "items": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "scene_id": {"type": "STRING"},
+                            "scene_heading": {"type": "STRING"},
+                            "costume_change": {"type": "STRING"}
+                        },
+                        "required": ["scene_id", "costume_change"]
+                    }
+                }
+            },
+            "required": ["recommended_costume", "styling_notes"]
+        }
+
+        result = await _generate_with_retry(provider, prompt, response_schema)
+        
+        character.costume_recommendation = result
+        db.add(character)
+        db.commit()
+        db.refresh(character)
+        
+        return result
