@@ -71,6 +71,31 @@ curl.exe -L "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapte
 curl.exe -L "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" -o "models\clip_vision\CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
 ```
 
+### 4. Running from a ZIP / RAR Archive (Transferring to a Friend)
+If you received this project as a highly compressed `.rar` or `.zip` file from the original creator, **do NOT use the existing virtual environments** (`.venv` or `venv`). Python virtual environments contain hardcoded paths to the original computer's folders and will break on yours! However, you **do not** need to download the heavy models again, as they are included in the archive.
+
+**Step 1: Recreate Backend Environment**
+```powershell
+cd backend
+rm -r -Force .venv  # Delete the broken environment
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Step 2: Recreate ComfyUI Environment**
+```powershell
+# Assuming you have uv installed (see Step 3.1 above)
+cd ComfyUI
+rm -r -Force venv  # Delete the broken environment
+uv venv venv --python 3.12
+uv pip install -p venv\Scripts\python.exe -r requirements.txt
+uv pip install -p venv\Scripts\python.exe torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+**Step 3: Add API Keys**
+Ensure you have a `.env` file in the root of the project with `GEMINI_API_KEY` and `GROQ_API_KEY`.
+
 ## ?? How to Run the Environment (3 Servers)
 To test the pipeline end-to-end, you need to ensure three processes are running simultaneously. **Always use background tasks (daemon mode) to run these.**
 
