@@ -51,14 +51,24 @@ If the user cloned this fresh, you must set up the ComfyUI python environment us
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 $env:Path = "$HOME\.local\bin;$env:Path"
 
-# 2. Setup Venv and Install CUDA PyTorch
+# 2. Clone ComfyUI and Setup Venv with CUDA PyTorch
+git clone https://github.com/comfyanonymous/ComfyUI.git ComfyUI
 cd ComfyUI
 uv venv venv --python 3.12
 uv pip install -p venv\Scripts\python.exe -r requirements.txt
 uv pip install -p venv\Scripts\python.exe torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# 3. Automatically download the SD1.5 model (4.27GB). Use a background task for this!
+# 3. Download the SD1.5 model (~4.27GB)
 curl.exe -L "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors" -o "models\checkpoints\v1-5-pruned-emaonly.safetensors"
+
+# 4. Install IPAdapter Plus Custom Node
+git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git custom_nodes/ComfyUI_IPAdapter_plus
+
+# 5. Download IPAdapter SD1.5 & CLIP Vision Models
+mkdir models\ipadapter
+mkdir models\clip_vision
+curl.exe -L "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter_sd15.safetensors" -o "models\ipadapter\ip-adapter_sd15.safetensors"
+curl.exe -L "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" -o "models\clip_vision\CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
 ```
 
 ## ?? How to Run the Environment (3 Servers)
