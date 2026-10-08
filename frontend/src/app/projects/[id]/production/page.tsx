@@ -3,543 +3,366 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Project, Script, ProductionAnalysisResponse, CharacterBibleResponse, WorldBibleResponse, SceneBreakdownResponse,
-  fetchProject, fetchScript, getProductionBibles, extractProductionBibles, fetchCharacterDialogues, CharacterDialoguesResponse,
-  generateCostumeRecommendation, fetchProjectBudget, BudgetResponse
-} from "@/lib/api";
+import { Activity, Book, Users, Image as ImageIcon, Map, Video, Clapperboard, Receipt, Clock, UserSquare2, RefreshCcw, Camera, Wand2 } from "lucide-react";
 
 export default function ProductionIntelligencePage() {
   const params = useParams();
-  const id = params.id as string;
-  
-  const [project, setProject] = useState<Project | null>(null);
-  const [script, setScript] = useState<Script | null>(null);
-  const [bibles, setBibles] = useState<ProductionAnalysisResponse | null>(null);
-  const [dialogues, setDialogues] = useState<CharacterDialoguesResponse | null>(null);
-  const [budget, setBudget] = useState<BudgetResponse | null>(null);
-  
-  const [loadingInitial, setLoadingInitial] = useState(true);
-  const [extracting, setExtracting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const projectId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<"characters" | "worlds" | "scenes" | "dialogues" | "budget">("characters");
-  const [selectedCharDialogue, setSelectedCharDialogue] = useState<string | null>(null);
-  const [generatingCostume, setGeneratingCostume] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState("character");
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
+  const [currency, setCurrency] = useState("INR");
+
+  const exchangeRates: Record<string, number> = {
+    INR: 1,
+    USD: 0.012,
+    EUR: 0.011,
+    GBP: 0.0095,
+  };
+  
+  const formatCurrency = (amount: number) => {
+    const rate = exchangeRates[currency];
+    const converted = amount * rate;
+    
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      maximumFractionDigits: currency === 'INR' ? 0 : 2
+    }).format(converted);
+  };
+
+  const fetchIntelligence = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/production/intelligence`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        if (json.dialogues?.length > 0) {
+          setSelectedCharacter(json.dialogues[0].character);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!id) return;
-    
-    const loadData = async () => {
-      try {
-        const [pData, sData, dData, budgetData] = await Promise.all([
-          fetchProject(id),
-          fetchScript(id).catch(() => null),
-          fetchCharacterDialogues(id).catch(() => (null)),
-          fetchProjectBudget(id).catch(() => (null))
-        ]);
-        setProject(pData);
-        setScript(sData);
-        setDialogues(dData);
-        setBudget(budgetData);
-        
-        if (sData?.id) {
-          const bData = await getProductionBibles(id, sData.id).catch(() => null);
-          setBibles(bData);
-        }
-      } catch (err: any) {
-        setError("Failed to load project details.");
-      } finally {
-        setLoadingInitial(false);
-      }
-    };
-    
-    loadData();
-  }, [id]);
+    fetchIntelligence();
+  }, [projectId]);
 
-  const handleExtract = async () => {
-    if (!script?.id) return;
-    setExtracting(true);
-    setError(null);
-    try {
-      const result = await extractProductionBibles(id, script.id);
-      setBibles(result);
-    } catch (err: any) {
-      setError(err.message || "Failed to extract production bibles");
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const handleGenerateCostume = async (characterId: string) => {
-    if (!project?.id) return;
-    setGeneratingCostume(prev => ({ ...prev, [characterId]: true }));
-    setError(null);
-    try {
-      const updatedChar = await generateCostumeRecommendation(project.id, characterId);
-      setBibles(prev => {
-        if (!prev) return prev;
-        const newChars = prev.characters.map(c => c.id === characterId ? updatedChar : c);
-        return { ...prev, characters: newChars };
-      });
-    } catch (err: any) {
-      setError(err.message || "Failed to generate costume recommendation");
-    } finally {
-      setGeneratingCostume(prev => ({ ...prev, [characterId]: false }));
-    }
-  };
-
-  if (loadingInitial) {
-    return <div className="p-8 text-gray-400">Loading Production Intelligence...</div>;
-  }
-
-  if (!project) {
-    return <div className="p-8 text-red-400">Project not found.</div>;
-  }
-
-  if (!script) {
+  if (loading) {
     return (
-      <div className="p-8 text-gray-300">
-        <h2 className="text-xl mb-4">No Script Found</h2>
-        <p>You need an approved script before you can generate production bibles.</p>
-        <Link href={`/projects/${id}/script`} className="text-indigo-400 mt-4 inline-block">Go to Script Studio</Link>
+      <div className="flex-1 p-8 flex items-center justify-center h-full">
+        <div className="text-gray-400 flex flex-col items-center gap-3">
+          <RefreshCcw className="w-6 h-6 animate-spin" />
+          <p>Analyzing script & extracting production intelligence...</p>
+        </div>
       </div>
     );
   }
 
-  const hasData = bibles && (bibles.characters.length > 0 || bibles.world_locations.length > 0 || bibles.scene_breakdowns.length > 0);
+  if (!data) {
+    return <div className="p-8 text-red-400">Failed to load production data.</div>;
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-200 overflow-hidden font-sans">
-      {/* Top Navbar */}
-      <header className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 flex-shrink-0">
-        <div className="flex items-center space-x-4">
-          <Link href={`/projects/${project.id}`} className="text-gray-400 hover:text-white transition-colors">
-            &larr; Dashboard
-          </Link>
-          <div className="h-6 w-px bg-gray-700"></div>
-          <h1 className="text-xl font-bold tracking-tight text-white">{project.name} <span className="text-gray-500 font-normal">/ Production Intelligence</span></h1>
+    <div className="flex flex-col h-full bg-[#0B0E14] text-gray-200 overflow-y-auto pb-20">
+      {/* Header */}
+      <div className="border-b border-gray-800/60 bg-[#0B0E14] sticky top-0 z-10 px-8 py-5">
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-4 font-medium tracking-wide">
+          <Link href={`/projects/${projectId}`} className="hover:text-gray-300 transition-colors">&larr; Dashboard</Link>
+          <span className="text-gray-700">|</span>
+          <span className="text-gray-400 font-semibold tracking-widest text-xs uppercase">Production Intelligence</span>
         </div>
-      </header>
-
-      <main className="flex-1 overflow-y-auto p-8 relative">
-        <div className="max-w-6xl mx-auto space-y-8">
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Production Bibles & Analysis</h2>
-              <p className="text-gray-400">AI-extracted characters, locations, and scene breakdowns derived from your script.</p>
-            </div>
-            {!hasData && (
-              <button
-                onClick={handleExtract}
-                disabled={extracting}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2 rounded-md font-medium transition-colors shadow-lg shadow-indigo-900/20"
-              >
-                {extracting ? "Extracting from Script..." : "Extract Production Intelligence"}
-              </button>
-            )}
-            {hasData && (
-              <button
-                onClick={handleExtract}
-                disabled={extracting}
-                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 px-4 py-2 rounded-md font-medium transition-colors border border-gray-700 text-sm"
-              >
-                {extracting ? "Regenerating..." : "Regenerate Analysis"}
-              </button>
-            )}
+        
+        <div className="flex justify-between items-end mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Production Bibles & Analysis</h1>
+            <p className="text-sm text-gray-400">AI-extracted characters, locations, and scene breakdowns derived from your script.</p>
           </div>
-
-          {error && (
-            <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-md">
-              {error}
-            </div>
-          )}
-
-          {hasData ? (
-            <div className="space-y-6">
-              <div className="flex space-x-1 border-b border-gray-800">
-                <button
-                  onClick={() => setActiveTab("characters")}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "characters" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                  }`}
-                >
-                  Character Bible ({bibles.characters.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("worlds")}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "worlds" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                  }`}
-                >
-                  World Bible ({bibles.world_locations.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("scenes")}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "scenes" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                  }`}
-                >
-                  Scene Breakdowns ({bibles.scene_breakdowns.length})
-                </button>
-                <button
-                  onClick={() => { setActiveTab("dialogues"); if (dialogues && !selectedCharDialogue) { setSelectedCharDialogue(Object.keys(dialogues)[0] || null); } }}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "dialogues" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                  }`}
-                >
-                  Dialogues ({dialogues ? Object.keys(dialogues).length : 0})
-                </button>
-                <button
-                  onClick={() => setActiveTab("budget")}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === "budget" ? "border-indigo-500 text-indigo-400" : "border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700"
-                  }`}
-                >
-                  Estimated Budget
-                </button>
-              </div>
-
-              <div className="py-4">
-                {activeTab === "characters" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {bibles.characters.map((char) => (
-                      <div key={char.id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
-                        <h3 className="text-xl font-bold text-gray-100 uppercase mb-2">{char.name}</h3>
-                        {char.description && <p className="text-gray-400 text-sm mb-4">{char.description}</p>}
-                        
-                        <div className="space-y-3 mt-4 text-sm">
-                          {char.appearance && <div><span className="text-gray-500">Appearance:</span> <span className="text-gray-300">{char.appearance}</span></div>}
-                          {char.personality && <div><span className="text-gray-500">Personality:</span> <span className="text-gray-300">{char.personality}</span></div>}
-                          
-                          {char.established_facts.length > 0 && (
-                            <div className="mt-4">
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Established Facts (Canon)</h4>
-                              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                                {char.established_facts.map((fact, i) => <li key={i}>{fact}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {char.inferred_facts.length > 0 && (
-                            <div className="mt-4">
-                              <h4 className="text-xs uppercase tracking-wider text-indigo-500/70 mb-2">AI Inferred Profile</h4>
-                              <ul className="list-disc list-inside text-indigo-200/70 space-y-1">
-                                {char.inferred_facts.map((fact, i) => <li key={i}>{fact}</li>)}
-                              </ul>
-                            </div>
-                          )}
-
-                          <div className="border-t border-gray-800 pt-4 mt-4">
-                            <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Established Costume</h4>
-                            <div className="text-gray-300 text-sm space-y-1">
-                              {char.clothing ? (
-                                <p>{char.clothing}</p>
-                              ) : (
-                                <p className="text-gray-500 italic">Not specified in screenplay</p>
-                              )}
-                              {char.accessories && <p><span className="text-gray-500">Accessories:</span> {char.accessories}</p>}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-2">Source: Screenplay</div>
-                          </div>
-
-                          <div className="border-t border-gray-800 pt-4 mt-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="text-xs uppercase tracking-wider text-indigo-400">Costume Recommendation</h4>
-                              <button 
-                                onClick={() => handleGenerateCostume(char.id)}
-                                disabled={generatingCostume[char.id]}
-                                className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-xs px-3 py-1 rounded border border-gray-700"
-                              >
-                                {generatingCostume[char.id] ? "Generating..." : "Generate Recommendation"}
-                              </button>
-                            </div>
-                            
-                            {char.costume_recommendation ? (
-                              <div className="space-y-3 text-gray-300 bg-gray-950/50 p-3 rounded border border-gray-800">
-                                <div className="text-xs text-indigo-500/70 mb-2">AI-generated suggestion</div>
-                                
-                                {char.costume_recommendation.recommended_costume && (
-                                  <div>
-                                    <div className="text-gray-500 text-xs mb-1">Primary</div>
-                                    <ul className="list-disc pl-4 space-y-1">
-                                      {char.costume_recommendation.recommended_costume.top && <li>{char.costume_recommendation.recommended_costume.top}</li>}
-                                      {char.costume_recommendation.recommended_costume.bottom && <li>{char.costume_recommendation.recommended_costume.bottom}</li>}
-                                      {char.costume_recommendation.recommended_costume.outerwear && <li>{char.costume_recommendation.recommended_costume.outerwear}</li>}
-                                      {char.costume_recommendation.recommended_costume.footwear && <li>{char.costume_recommendation.recommended_costume.footwear}</li>}
-                                    </ul>
-                                  </div>
-                                )}
-                                
-                                {char.costume_recommendation.recommended_costume?.accessories?.length > 0 && (
-                                  <div>
-                                    <div className="text-gray-500 text-xs mb-1">Accessories</div>
-                                    <p>{char.costume_recommendation.recommended_costume.accessories.join(", ")}</p>
-                                  </div>
-                                )}
-
-                                {char.costume_recommendation.color_palette?.length > 0 && (
-                                  <div>
-                                    <div className="text-gray-500 text-xs mb-1">Color Palette</div>
-                                    <p>{char.costume_recommendation.color_palette.join(", ")}</p>
-                                  </div>
-                                )}
-
-                                {char.costume_recommendation.styling_notes && (
-                                  <div>
-                                    <div className="text-gray-500 text-xs mb-1">Styling Notes</div>
-                                    <p className="italic text-gray-400">{char.costume_recommendation.styling_notes}</p>
-                                  </div>
-                                )}
-                                
-                                {char.costume_recommendation.continuity_notes && (
-                                  <div>
-                                    <div className="text-gray-500 text-xs mb-1">Continuity</div>
-                                    <p className="text-gray-400">{char.costume_recommendation.continuity_notes}</p>
-                                  </div>
-                                )}
-
-                                {char.costume_recommendation.scene_variations?.length > 0 && (
-                                  <div className="mt-3 border-t border-gray-800 pt-3">
-                                    <div className="text-gray-500 text-xs mb-2">Scene Variations</div>
-                                    <div className="space-y-2">
-                                      {char.costume_recommendation.scene_variations.map((v: any, idx: number) => (
-                                        <div key={idx} className="bg-gray-900 p-2 rounded text-xs border border-gray-800">
-                                          <div className="text-indigo-400 mb-1">{v.scene_heading}</div>
-                                          <div className="text-gray-300">{v.costume_change}</div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-gray-500 text-xs italic">No recommendation generated yet.</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeTab === "worlds" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {bibles.world_locations.map((loc) => (
-                      <div key={loc.id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
-                        <h3 className="text-xl font-bold text-gray-100 uppercase mb-2">{loc.name}</h3>
-                        {loc.description && <p className="text-gray-400 text-sm mb-4">{loc.description}</p>}
-                        
-                        <div className="space-y-3 mt-4 text-sm">
-                          {loc.architecture && <div><span className="text-gray-500">Architecture:</span> <span className="text-gray-300">{loc.architecture}</span></div>}
-                          {loc.lighting_characteristics && <div><span className="text-gray-500">Lighting:</span> <span className="text-gray-300">{loc.lighting_characteristics}</span></div>}
-                          
-                          {loc.established_facts.length > 0 && (
-                            <div className="mt-4">
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Established Facts</h4>
-                              <ul className="list-disc list-inside text-gray-300 space-y-1">
-                                {loc.established_facts.map((fact, i) => <li key={i}>{fact}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                          
-                          {loc.inferred_facts.length > 0 && (
-                            <div className="mt-4">
-                              <h4 className="text-xs uppercase tracking-wider text-indigo-500/70 mb-2">AI Inferences</h4>
-                              <ul className="list-disc list-inside text-indigo-200/70 space-y-1">
-                                {loc.inferred_facts.map((fact, i) => <li key={i}>{fact}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeTab === "scenes" && (
-                  <div className="space-y-6">
-                    {bibles.scene_breakdowns.map((scene) => (
-                      <div key={scene.id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm flex flex-col md:flex-row gap-6">
-                        <div className="md:w-1/3 border-r border-gray-800 pr-6">
-                          <h3 className="text-lg font-bold text-gray-100 uppercase">{scene.location || "Unknown Location"}</h3>
-                          <div className="text-indigo-400 text-sm mb-4">{scene.time_of_day || "Unknown Time"}</div>
-                          
-                          <div className="space-y-2 text-sm">
-                            {scene.story_beat && <div><span className="text-gray-500 block text-xs uppercase mb-1">Story Beat</span> <span className="text-gray-300">{scene.story_beat}</span></div>}
-                            {scene.emotional_beat && <div className="mt-3"><span className="text-gray-500 block text-xs uppercase mb-1">Emotional Beat</span> <span className="text-gray-300">{scene.emotional_beat}</span></div>}
-                          </div>
-                        </div>
-                        
-                        <div className="md:w-2/3 space-y-4 text-sm">
-                          {scene.summary && (
-                            <div>
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Scene Summary</h4>
-                              <p className="text-gray-300 text-base mb-2">{scene.summary}</p>
-                            </div>
-                          )}
-                          {scene.narrative_purpose && (
-                            <div>
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Narrative Purpose</h4>
-                              <p className="text-gray-300">{scene.narrative_purpose}</p>
-                            </div>
-                          )}
-                          {scene.visual_context && (
-                            <div>
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Visual Context</h4>
-                              <p className="text-gray-300">{scene.visual_context}</p>
-                            </div>
-                          )}
-                          {scene.props && scene.props.length > 0 && (
-                            <div>
-                              <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Props Needed</h4>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {scene.props.map((prop, i) => (
-                                  <span key={i} className="bg-gray-800 border border-gray-700 text-gray-300 px-2 py-1 rounded text-xs">{prop}</span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {activeTab === "dialogues" && dialogues && (
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="md:w-1/4">
-                      <h3 className="text-lg font-bold text-gray-100 mb-4">Characters</h3>
-                      <div className="space-y-1">
-                        {Object.keys(dialogues).map((charName) => (
-                          <button
-                            key={charName}
-                            onClick={() => setSelectedCharDialogue(charName)}
-                            className={`w-full text-left px-4 py-2 rounded-md transition-colors ${
-                              selectedCharDialogue === charName
-                                ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
-                                : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
-                            }`}
-                          >
-                            {charName} <span className="text-gray-600 text-xs ml-2">({dialogues[charName].length})</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="md:w-3/4">
-                      {selectedCharDialogue && dialogues[selectedCharDialogue] ? (
-                        <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
-                          <h3 className="text-xl font-bold text-gray-100 uppercase mb-6 border-b border-gray-800 pb-4">
-                            {selectedCharDialogue}'s Dialogue
-                          </h3>
-                          <div className="space-y-8">
-                            {dialogues[selectedCharDialogue].map((line, idx) => (
-                              <div key={idx} className="relative pl-4 border-l-2 border-gray-700">
-                                <div className="text-xs text-indigo-400 mb-1 uppercase tracking-wider">
-                                  Scene {line.scene_number}: {line.scene_heading}
-                                </div>
-                                <div className="font-bold text-gray-300 mb-1">
-                                  {line.original_character || selectedCharDialogue}
-                                </div>
-                                {line.parenthetical && (
-                                  <div className="text-gray-500 italic text-sm mb-1">
-                                    ({line.parenthetical})
-                                  </div>
-                                )}
-                                <p className="text-gray-300 text-lg leading-relaxed font-serif">
-                                  {line.text}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-64 text-gray-500">
-                          Select a character to view their dialogue lines.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "budget" && budget && (
-                  <div className="space-y-8">
-                    <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
-                      <h3 className="text-xl font-bold text-gray-100 uppercase mb-4">Overall Estimated Budget</h3>
-                      <div className="text-4xl font-bold text-indigo-400 mb-6">
-                        {budget.currency} {budget.total.toLocaleString()}
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        {Object.entries(budget.category_totals).map(([cat, amount]) => (
-                          <div key={cat} className="bg-gray-950 p-4 rounded border border-gray-800">
-                            <div className="text-xs uppercase text-gray-500 tracking-wider mb-1">{cat}</div>
-                            <div className="text-lg text-gray-200 font-medium">{budget.currency} {amount.toLocaleString()}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-8 border-t border-gray-800 pt-6">
-                        <h4 className="text-sm uppercase tracking-wider text-gray-500 mb-3">Calculation Basis (Active Rates)</h4>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-xs text-gray-400">
-                          {Object.entries(budget.rates).map(([rateKey, rateValue]) => (
-                            <div key={rateKey}>
-                              <span className="text-gray-500">{rateKey.replace(/_/g, ' ')}:</span> 
-                              <span className="ml-2 text-gray-300 font-medium">
-                                {rateValue > 10 ? `${budget.currency} ${rateValue}` : `${rateValue}x multiplier`}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-bold text-gray-100 uppercase mb-4">Scene-by-Scene Breakdown</h3>
-                      {budget.scenes.map((scene) => (
-                        <div key={scene.scene_id} className="bg-gray-900 border border-gray-800 rounded-lg p-6 shadow-sm">
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-4 border-b border-gray-800">
-                            <div>
-                              <div className="text-indigo-400 font-medium text-sm mb-1">Scene {scene.scene_number}</div>
-                              <h4 className="text-lg font-bold text-gray-200">{scene.heading}</h4>
-                            </div>
-                            <div className="text-xl font-bold text-indigo-400 mt-2 md:mt-0">
-                              {budget.currency} {scene.total.toLocaleString()}
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-y-4 gap-x-2 text-sm">
-                            {Object.entries(scene.breakdown).map(([cat, amount]) => (
-                              <div key={cat} className="flex justify-between items-center pr-4">
-                                <span className="text-gray-500 capitalize">{cat}:</span>
-                                <span className="text-gray-300 font-medium">{amount.toLocaleString()}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            !extracting && (
-              <div className="flex flex-col items-center justify-center py-20 bg-gray-900/50 border border-gray-800 border-dashed rounded-xl">
-                <svg className="w-16 h-16 text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <h3 className="text-xl font-medium text-gray-300 mb-2">No Intelligence Extracted Yet</h3>
-                <p className="text-gray-500 text-center max-w-md">
-                  Click the extract button above to let AI analyze your script and build production bibles for characters, worlds, and scenes.
-                </p>
-              </div>
-            )
-          )}
+          <div className="flex gap-4 items-center">
+            <button 
+              onClick={fetchIntelligence}
+              className="px-4 py-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-2"
+            >
+              <RefreshCcw className="w-3.5 h-3.5" />
+              Regenerate Analysis
+            </button>
+            <Link 
+              href={`/projects/${projectId}/cinematography`}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-medium transition-colors flex items-center shadow-lg shadow-emerald-900/20"
+            >
+              Continue to Cinematography &rarr;
+            </Link>
+          </div>
         </div>
-      </main>
+
+        {/* Tabs */}
+        <div className="flex gap-8 border-b border-gray-800">
+          {[
+            { id: "character", label: `Character Bible (${data.characters?.length || 0})` },
+            { id: "world", label: `World Bible (${data.locations?.length || 0})` },
+            { id: "breakdown", label: `Scene Breakdowns (${data.scenes?.length || 0})` },
+            { id: "dialogue", label: `Dialogues (${data.dialogues?.length || 0})` },
+            { id: "budget", label: "Estimated Budget" },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-3 text-sm font-medium transition-all relative ${
+                activeTab === tab.id ? "text-indigo-400" : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-t-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-8">
+        {/* CHARACTER BIBLE */}
+        {activeTab === "character" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {data.characters.map((char: any, i: number) => (
+              <div key={i} className="bg-[#11141D] border border-gray-800/80 rounded-xl p-6 shadow-xl flex flex-col h-full">
+                <h2 className="text-xl font-bold text-white mb-6 tracking-wide">{char.name}</h2>
+                
+                <div className="mb-6 flex-1">
+                  <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Established Facts (Canon)</h3>
+                  <ul className="list-disc list-outside ml-4 space-y-2 text-sm text-gray-300 leading-relaxed">
+                    {char.established_facts.map((fact: string, j: number) => (
+                      <li key={j} className="pl-1">{fact}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="mb-6">
+                  <h3 className="text-[10px] font-bold text-indigo-500/70 uppercase tracking-widest mb-3">AI Inferred Profile</h3>
+                  <ul className="list-disc list-outside ml-4 space-y-2 text-sm text-indigo-200/80 leading-relaxed">
+                    {char.ai_inferred_profile.map((prof: string, j: number) => (
+                      <li key={j} className="pl-1">{prof}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="pt-5 border-t border-gray-800/80">
+                  <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Established Costume</h3>
+                  <p className="text-sm text-gray-400 italic mb-4">{char.established_costume}</p>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest leading-tight w-24">Costume<br/>Recommendation</div>
+                  </div>
+                  <p className="text-sm text-indigo-200 mt-2">{char.costume_recommendation}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* WORLD BIBLE */}
+        {activeTab === "world" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {data.locations.map((loc: any, i: number) => (
+              <div key={i} className="bg-[#11141D] border border-gray-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                <h2 className="text-lg font-bold text-white mb-2">{loc.name}</h2>
+                <p className="text-sm text-gray-400 mb-6 h-10 line-clamp-2">{loc.established_facts[0]}</p>
+                
+                <div className="mb-6">
+                  <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Established Facts</h3>
+                  <ul className="list-disc list-outside ml-4 space-y-2 text-sm text-gray-300">
+                    {loc.established_facts.slice(1).map((fact: string, j: number) => (
+                      <li key={j} className="pl-1">{fact}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-auto">
+                  <h3 className="text-[10px] font-bold text-indigo-500/70 uppercase tracking-widest mb-3">AI Inferences</h3>
+                  <ul className="list-disc list-outside ml-4 space-y-2 text-sm text-indigo-200/80">
+                    {loc.ai_inferences.map((inf: string, j: number) => (
+                      <li key={j} className="pl-1">{inf}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* SCENE BREAKDOWNS */}
+        {activeTab === "breakdown" && (
+          <div className="space-y-4 max-w-4xl">
+            {data.scenes.map((scene: any, i: number) => (
+              <div key={i} className="bg-[#11141D] border border-gray-800/80 rounded-xl p-6 flex gap-6">
+                <div className="w-24 flex-shrink-0 flex flex-col items-center justify-center border-r border-gray-800/80 pr-6">
+                  <div className="text-xs text-gray-500 font-bold uppercase mb-1">Scene</div>
+                  <div className="text-3xl font-black text-gray-200">{scene.scene_name.split(' ')[0]}</div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-indigo-100 mb-2">{scene.scene_name.split(' - ').slice(1).join(' - ')}</h3>
+                  <p className="text-sm text-gray-400 mb-4 leading-relaxed">{scene.summary}</p>
+                  <div className="flex gap-4">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Map className="w-3.5 h-3.5" /> {scene.location}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Clock className="w-3.5 h-3.5" /> {scene.time}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Users className="w-3.5 h-3.5" /> {scene.characters.join(", ")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* DIALOGUES */}
+        {activeTab === "dialogue" && (
+          <div className="flex gap-8 items-start">
+            <div className="w-64 flex-shrink-0 flex flex-col gap-2 sticky top-24">
+              <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 px-3">Characters</h3>
+              {data.dialogues.map((charData: any) => (
+                <button
+                  key={charData.character}
+                  onClick={() => setSelectedCharacter(charData.character)}
+                  className={`text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors flex justify-between items-center ${
+                    selectedCharacter === charData.character 
+                    ? "bg-indigo-900/40 text-indigo-200 border border-indigo-500/30" 
+                    : "bg-transparent text-gray-400 hover:bg-gray-800/50 border border-transparent hover:border-gray-700/50"
+                  }`}
+                >
+                  {charData.character}
+                  <span className="text-[10px] opacity-60">({charData.lines.length})</span>
+                </button>
+              ))}
+            </div>
+            
+            <div className="flex-1 bg-[#11141D] border border-gray-800/80 rounded-xl p-8 shadow-xl min-h-[500px]">
+              {selectedCharacter ? (
+                <>
+                  <h2 className="text-xl font-bold text-white mb-8 tracking-wide">{selectedCharacter}&apos;S DIALOGUE</h2>
+                  <div className="space-y-8">
+                    {data.dialogues.find((d: any) => d.character === selectedCharacter)?.lines.map((line: any, i: number) => (
+                      <div key={i} className="border-l-2 border-indigo-500/30 pl-5">
+                        <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2">SCENE {line.scene}</div>
+                        <p className="text-gray-200 text-lg leading-relaxed max-w-2xl font-serif">"{line.text}"</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-gray-500 h-full flex items-center justify-center">Select a character to view their dialogue.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* BUDGET */}
+        {activeTab === "budget" && (
+          <div className="max-w-5xl">
+            <div className="bg-[#11141D] border border-gray-800/80 rounded-xl p-8 shadow-xl mb-8 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
+                <Receipt className="w-64 h-64" />
+              </div>
+              
+              <div className="flex justify-between items-start mb-8">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Overall Estimated Budget</h3>
+                  <div className="text-5xl font-black text-indigo-400 tracking-tight">
+                    {formatCurrency(data.budget.total)}
+                  </div>
+                </div>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="bg-gray-800/80 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500 z-10 relative"
+                >
+                  <option value="INR">INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                {[
+                  { label: "CAST", val: data.budget.cast },
+                  { label: "LOCATION", val: data.budget.location },
+                  { label: "EQUIPMENT", val: data.budget.equipment },
+                  { label: "LIGHTING", val: data.budget.lighting },
+                  { label: "COSTUMES", val: data.budget.costumes },
+                  { label: "PROPS", val: data.budget.props },
+                  { label: "MAKEUP", val: data.budget.makeup },
+                  { label: "CREW", val: data.budget.crew },
+                  { label: "TRANSPORT", val: data.budget.transport },
+                  { label: "MISC", val: data.budget.misc },
+                ].map(item => (
+                  <div key={item.label} className="bg-gray-900/50 border border-gray-800/60 rounded-lg p-4">
+                    <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">{item.label}</div>
+                    <div className="text-lg font-semibold text-gray-200">{formatCurrency(item.val)}</div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="border-t border-gray-800/80 pt-6">
+                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Calculation Basis (Active Rates)</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-y-3 gap-x-6 text-xs text-gray-400">
+                  <div>cast per actor: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.cast_per_actor)}</span></div>
+                  <div>location per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.location_per_scene)}</span></div>
+                  <div>equipment per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.equipment_per_scene)}</span></div>
+                  <div>lighting per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.lighting_per_scene)}</span></div>
+                  <div>costume per new: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.costume_per_new)}</span></div>
+                  <div>prop per item: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.prop_per_item)}</span></div>
+                  <div>makeup per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.makeup_per_scene)}</span></div>
+                  <div>crew per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.crew_per_scene)}</span></div>
+                  <div>transport per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.transport_per_scene)}</span></div>
+                  <div>misc per scene: <span className="text-gray-300 font-medium">{formatCurrency(data.rates.misc_per_scene)}</span></div>
+                  <div>night lighting multiplier: <span className="text-gray-300 font-medium">{data.rates.night_lighting_multiplier}x multiplier</span></div>
+                  <div>exterior location multiplier: <span className="text-gray-300 font-medium">{data.rates.exterior_location_multiplier}x multiplier</span></div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              {data.budget.scene_budgets.map((sb: any) => (
+                <div key={sb.scene_id} className="bg-[#11141D] border border-gray-800/80 rounded-xl p-6 flex flex-col md:flex-row justify-between md:items-center gap-6">
+                  <div>
+                    <div className="text-xs text-indigo-400 font-bold uppercase mb-1">Scene {sb.scene_name.split(' - ')[0]}</div>
+                    <div className="text-lg font-bold text-gray-100">{sb.scene_name.split(' - ').slice(1).join(' - ')}</div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-2 text-xs text-gray-400">
+                     <div>Cast: <span className="text-gray-200">{sb.cast.toLocaleString()}</span></div>
+                     <div>Location: <span className="text-gray-200">{sb.location.toLocaleString()}</span></div>
+                     <div>Equipment: <span className="text-gray-200">{sb.equipment.toLocaleString()}</span></div>
+                     <div>Lighting: <span className="text-gray-200">{sb.lighting.toLocaleString()}</span></div>
+                     <div>Costumes: <span className="text-gray-200">{sb.costumes.toLocaleString()}</span></div>
+                     <div>Props: <span className="text-gray-200">{sb.props.toLocaleString()}</span></div>
+                     <div>Makeup: <span className="text-gray-200">{sb.makeup.toLocaleString()}</span></div>
+                     <div>Crew: <span className="text-gray-200">{sb.crew.toLocaleString()}</span></div>
+                     <div>Transport: <span className="text-gray-200">{sb.transport.toLocaleString()}</span></div>
+                     <div>Misc: <span className="text-gray-200">{sb.misc.toLocaleString()}</span></div>
+                  </div>
+                  
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-2xl font-black text-indigo-300">{formatCurrency(sb.total)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

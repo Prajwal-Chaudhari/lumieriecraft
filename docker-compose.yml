@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - lumierecraft_data:/app/data
+    environment:
+      - DB_PATH=/app/data/lumierecraft.db
+      # Environment variables can be provided via .env file or here directly.
+      - IMAGE_GENERATION_PROVIDER=${IMAGE_GENERATION_PROVIDER:-pixazo}
+      - PIXAZO_API_KEY=${PIXAZO_API_KEY}
+      - SCRIPT_WRITER_PROVIDER=${SCRIPT_WRITER_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
+    restart: unless-stopped
+    networks:
+      - lumierecraft_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - lumierecraft_net
+
+volumes:
+  lumierecraft_data:
+
+networks:
+  lumierecraft_net:
